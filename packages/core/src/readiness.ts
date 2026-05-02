@@ -12,3 +12,19 @@ export interface ReadinessReporter {
 }
 
 export const READINESS_REPORTER = Symbol.for('silver8.ReadinessReporter');
+
+/**
+ * Components that hold long-lived consumer connections implement Drainable so
+ * the hub can orchestrate graceful shutdown (DEC-019). The hub provides a
+ * DrainableRegistrar; subsystems inject it and register themselves at bootstrap.
+ */
+export interface Drainable {
+  readonly drainName: string;
+  drain(deadlineMs: number): Promise<void>;
+}
+
+export interface DrainableRegistrar {
+  register(drainable: Drainable): void;
+}
+
+export const DRAIN_REGISTRAR = Symbol.for('silver8.DrainableRegistrar');
