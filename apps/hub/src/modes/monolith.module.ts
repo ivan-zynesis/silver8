@@ -1,12 +1,10 @@
 import { Module, type DynamicModule } from '@nestjs/common';
-import { DRAIN_REGISTRAR } from '@silver8/core';
 import { GatewayWsModule } from '@silver8/gateway-ws';
 import { IngestionModule } from '@silver8/ingestion';
 import { McpServerModule } from '@silver8/mcp-server';
 import { ConfigModule } from '../config/config.module.js';
 import { symbolsFromEnv, type Env } from '../config/env.js';
 import { HttpModule } from '../http/http.module.js';
-import { ShutdownService } from '../shutdown/shutdown.service.js';
 import { CoreMemoryModule } from './core-memory.module.js';
 import { ObservabilityModule } from './observability.module.js';
 
@@ -42,13 +40,11 @@ export class MonolithModule {
           transport: env.MCP_TRANSPORT,
           httpPath: '/mcp',
           drainDeadlineMs: env.DRAIN_DEADLINE_MS,
+          symbols: symbolsFromEnv(env),
         }),
       ],
-      providers: [
-        ShutdownService,
-        { provide: DRAIN_REGISTRAR, useExisting: ShutdownService },
-      ],
-      exports: [ShutdownService, DRAIN_REGISTRAR],
+      providers: [],
+      exports: [],
     };
   }
 }
