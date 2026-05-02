@@ -1,9 +1,10 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { LOGGER } from '@silver8/core';
 import { createLogger } from '@silver8/observability';
 import { ConfigModule, ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 
+@Global()
 @Module({
   imports: [ConfigModule],
   providers: [

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { ReadinessReporter } from '@silver8/core';
 
 /**
  * Aggregates readiness signals from each subsystem (ingestion, gateway, mcp).
@@ -6,9 +7,12 @@ import { Injectable } from '@nestjs/common';
  *
  * On SIGTERM the shutdown service calls `markDraining()` which immediately flips
  * /readyz to not-ready so the LB stops sending new connections (DEC-019, DEC-020).
+ *
+ * Implements the @silver8/core ReadinessReporter contract so subsystem packages
+ * can depend on the interface without depending on apps/hub.
  */
 @Injectable()
-export class ReadinessService {
+export class ReadinessService implements ReadinessReporter {
   private readonly states = new Map<string, boolean>();
   private draining = false;
 
