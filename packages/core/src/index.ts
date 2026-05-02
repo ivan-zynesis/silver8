@@ -5,6 +5,7 @@ export * from './bus.js';
 export * from './store.js';
 export * from './registry.js';
 export * from './errors.js';
+export * from './readiness.js';
 
 /**
  * Injection tokens for NestJS. Components depend on these symbols, never on

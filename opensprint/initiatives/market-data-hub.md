@@ -47,7 +47,7 @@ The architecture is shaped around three deployment variants from day 1: a `MODE=
 
 ## Milestones
 
-- [ ] **core-seams-nestjs-skeleton**: Define `core/` interfaces (Bus, OrderBookStore, Registry, types). Ship `core-memory/` implementations honoring distributed semantics (DEC-005). Set up NestJS modules and the three-variant composition root (DEC-016: monolith, ingestion, gateway). Wire observability foundation: structured logger, `/healthz`, `/readyz`, `/metrics` (Prometheus), SIGTERM drain hook scaffold (DEC-020). Bus semantics test suite + Registry churn/storm/slow-consumer tests (DEC-006).
+- [x] **core-seams-nestjs-skeleton**: Define `core/` interfaces (Bus, OrderBookStore, Registry, types). Ship `core-memory/` implementations honoring distributed semantics (DEC-005). Set up NestJS modules and the three-variant composition root (DEC-016: monolith, ingestion, gateway). Wire observability foundation: structured logger, `/healthz`, `/readyz`, `/metrics` (Prometheus), SIGTERM drain hook scaffold (DEC-020). Bus semantics test suite + Registry churn/storm/slow-consumer tests (DEC-006). _Completed 2026-05-02; 37 tests passing; all three MODE variants verified live._
 
 - [ ] **ingestion-coinbase-l2**: Implement `CoinbaseAdapter` (DEC-007) with WS lifecycle, reconnect-with-backoff, heartbeat subscription. Sequence-gap detection + stale signaling + automated per-symbol resync (DEC-010). L2 order book maintenance: snapshot apply + update apply → top-N read views (DEC-009). Demand-driven upstream subscription via `Registry.onDemandChange`. Fixture-replay tests covering gap recovery, reconnect, stale propagation.
 
