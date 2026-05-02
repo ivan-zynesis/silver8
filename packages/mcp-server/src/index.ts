@@ -1,27 +1,22 @@
-// Module surface filled in by Milestone 4 (mcp-server).
+import { Module, type DynamicModule } from '@nestjs/common';
+import { MCP_SERVER_CONFIG, type McpServerConfig } from './config.js';
+import { McpServerService } from './mcp-server.service.js';
 
-import { Module } from '@nestjs/common';
+export type { McpServerConfig, McpTransport } from './config.js';
+export { McpServerService } from './mcp-server.service.js';
+export { buildMcpStatus, type McpHubStatus } from './status-builder.js';
 
-export type McpTransport = 'http' | 'stdio';
-
-export interface McpServerConfig {
-  transport: McpTransport;
-  /** Required when transport=http; ignored for stdio. */
-  httpPath?: string;
-  /** Drain grace period for SIGTERM rebalance hint. */
-  drainDeadlineMs: number;
-}
-
-@Module({
-  providers: [],
-  exports: [],
-})
+@Module({})
 export class McpServerModule {
-  static forRoot(_config: McpServerConfig) {
+  static forRoot(config: McpServerConfig): DynamicModule {
     return {
       module: McpServerModule,
-      providers: [],
-      exports: [],
+      global: true,
+      providers: [
+        { provide: MCP_SERVER_CONFIG, useValue: config },
+        McpServerService,
+      ],
+      exports: [McpServerService],
     };
   }
 }
