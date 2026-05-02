@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src"
+  },
+  "references": [
+    { "path": "../../packages/core" },
+    { "path": "../../packages/core-memory" },
+    { "path": "../../packages/observability" },
+    { "path": "../../packages/ingestion" },
+    { "path": "../../packages/gateway-ws" },
+    { "path": "../../packages/mcp-server" }
+  ],
+  "include": ["src/**/*"]
+}

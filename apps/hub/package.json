@@ -1,0 +1,38 @@
+{
+  "name": "@silver8/hub",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/main.js",
+    "dev": "tsx watch src/main.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@nestjs/common": "^10.3.0",
+    "@nestjs/core": "^10.3.0",
+    "@nestjs/platform-fastify": "^10.3.0",
+    "@silver8/core": "workspace:*",
+    "@silver8/core-memory": "workspace:*",
+    "@silver8/gateway-ws": "workspace:*",
+    "@silver8/ingestion": "workspace:*",
+    "@silver8/mcp-server": "workspace:*",
+    "@silver8/observability": "workspace:*",
+    "fastify": "^4.26.0",
+    "pino": "^8.19.0",
+    "prom-client": "^15.1.0",
+    "reflect-metadata": "^0.2.1",
+    "rxjs": "^7.8.1",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.4.0"
+  }
+}
