@@ -1,0 +1,27 @@
+services:
+  hub:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: silver8-hub
+    environment:
+      MODE: monolith
+      HTTP_PORT: 3000
+      WS_PORT: 3001
+      MCP_TRANSPORT: http
+      LOG_LEVEL: info
+      LOG_PRETTY: "0"
+      COINBASE_WS_URL: wss://advanced-trade-ws.coinbase.com
+      COINBASE_SYMBOLS: BTC-USD,ETH-USD,SOL-USD
+      DRAIN_DEADLINE_MS: "30000"
+    ports:
+      - "3000:3000"  # HTTP shell + MCP HTTP transport
+      - "3001:3001"  # WebSocket gateway
+    healthcheck:
+      test: ["CMD", "/nodejs/bin/node", "-e", "fetch('http://localhost:3000/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    stop_grace_period: 35s  # > DRAIN_DEADLINE_MS so SIGTERM drain finishes cleanly
+    restart: unless-stopped
