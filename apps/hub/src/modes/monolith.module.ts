@@ -1,4 +1,5 @@
 import { Module, type DynamicModule } from '@nestjs/common';
+import { DRAIN_REGISTRAR } from '@silver8/core';
 import { GatewayWsModule } from '@silver8/gateway-ws';
 import { IngestionModule } from '@silver8/ingestion';
 import { McpServerModule } from '@silver8/mcp-server';
@@ -43,8 +44,11 @@ export class MonolithModule {
           drainDeadlineMs: env.DRAIN_DEADLINE_MS,
         }),
       ],
-      providers: [ShutdownService],
-      exports: [ShutdownService],
+      providers: [
+        ShutdownService,
+        { provide: DRAIN_REGISTRAR, useExisting: ShutdownService },
+      ],
+      exports: [ShutdownService, DRAIN_REGISTRAR],
     };
   }
 }

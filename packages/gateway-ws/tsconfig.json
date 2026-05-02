@@ -4,6 +4,10 @@
     "outDir": "./dist",
     "rootDir": "./src"
   },
-  "references": [{ "path": "../core" }, { "path": "../observability" }],
+  "references": [
+    { "path": "../core" },
+    { "path": "../core-memory" },
+    { "path": "../observability" }
+  ],
   "include": ["src/**/*"]
 }
