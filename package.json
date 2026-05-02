@@ -1,0 +1,29 @@
+{
+  "name": "silver8-market-data-hub",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Real-time crypto market data hub with native MCP interface",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.0",
+  "scripts": {
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "dev": "turbo run dev --parallel",
+    "start": "pnpm --filter @silver8/hub start",
+    "start:monolith": "MODE=monolith pnpm --filter @silver8/hub start",
+    "start:ingestion": "MODE=ingestion pnpm --filter @silver8/hub start",
+    "start:gateway": "MODE=gateway pnpm --filter @silver8/hub start"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "turbo": "^1.12.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.4.0"
+  }
+}
