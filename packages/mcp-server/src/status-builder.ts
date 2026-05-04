@@ -13,7 +13,17 @@ import type {
  * `catalog` answers "what could a consumer ask for?" (DEC-030); `active`
  * answers "what is currently warm?" The two diverge in the demand-driven
  * world (DEC-027) — a cold hub has populated catalog and empty active.
+ *
+ * `mcp` surfaces the configured MCP transport + path so the dashboard can
+ * render a truthful onboarding snippet (DEC-014; dashboard-validation-tools
+ * initiative). Optional because non-monolith modes may not host MCP.
  */
+export interface McpStatus {
+  transport: 'http' | 'stdio';
+  /** Mounted HTTP path when transport='http' (e.g. '/mcp'). Empty for stdio. */
+  path: string;
+}
+
 export interface McpHubStatus {
   service: string;
   mode: string;
@@ -28,6 +38,7 @@ export interface McpHubStatus {
   }>;
   consumers: { ws: number; mcp: number; totalSubscriptions: number };
   upstream: Record<string, unknown>;
+  mcp?: McpStatus;
 }
 
 export interface StatusBuilderOptions {
@@ -35,6 +46,7 @@ export interface StatusBuilderOptions {
   mode: string;
   startedAtMs: number;
   upstream?: Record<string, unknown>;
+  mcp?: McpStatus;
 }
 
 export function buildMcpStatus(
@@ -75,5 +87,6 @@ export function buildMcpStatus(
       totalSubscriptions: regStatus.totalSubscriptions,
     },
     upstream: opts.upstream ?? {},
+    ...(opts.mcp ? { mcp: opts.mcp } : {}),
   };
 }

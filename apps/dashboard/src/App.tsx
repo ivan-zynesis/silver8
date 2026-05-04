@@ -1,26 +1,11 @@
-import { useMemo, useState } from 'react';
 import { useStatus } from './api/use-status.js';
-import { useBookSubscription } from './api/use-book.js';
 import { StatusPanel } from './components/StatusPanel.js';
-import { SymbolPicker } from './components/SymbolPicker.js';
-import { BookTicker } from './components/BookTicker.js';
-
-function bookUri(symbol: string): string {
-  return `market://coinbase/book/${symbol}`;
-}
+import { TickerTabs } from './components/TickerTabs.js';
+import { McpOnboarding } from './components/McpOnboarding.js';
 
 export function App() {
   const { status, loading, error } = useStatus(1500);
-  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
-
-  // DEC-030 / DEC-032: catalog is the authoritative answer to "what could a
-  // consumer subscribe to?" The picker reads it directly so the chicken-and-egg
-  // demand-driven cold-start problem doesn't occur.
-  const symbols = useMemo(() => {
-    return status?.catalog?.map((entry) => entry.symbol) ?? [];
-  }, [status]);
-
-  const bookSub = useBookSubscription(selectedSymbol ? bookUri(selectedSymbol) : null);
+  const catalog = status?.catalog ?? [];
 
   return (
     <div className="app">
@@ -31,25 +16,14 @@ export function App() {
 
       <main className="app__main">
         <StatusPanel status={status} loading={loading} error={error} />
-
-        <section className="panel">
-          <SymbolPicker
-            symbols={symbols}
-            selected={selectedSymbol}
-            onChange={setSelectedSymbol}
-          />
-        </section>
-
-        <BookTicker
-          symbol={selectedSymbol}
-          view={bookSub.view}
-          connection={bookSub.connection}
-          lastNotice={bookSub.lastNotice}
-        />
+        <TickerTabs catalog={catalog} />
+        <McpOnboarding status={status} />
       </main>
 
       <footer className="app__footer">
-        <span className="muted">DEC-025 · DEC-026 · DS-OPERATOR-USABILITY</span>
+        <span className="muted">
+          DEC-025 · DEC-026 · DEC-030 · DS-OPERATOR-USABILITY
+        </span>
       </footer>
     </div>
   );

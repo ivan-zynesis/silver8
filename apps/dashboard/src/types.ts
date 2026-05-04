@@ -38,6 +38,11 @@ export interface HubStatus {
       lifecycle: 'demand_driven' | 'eager';
     };
   } & Record<string, unknown>;
+  /** MCP transport + path so the onboarding panel can render a truthful snippet. */
+  mcp?: {
+    transport: 'http' | 'stdio';
+    path: string;
+  };
 }
 
 export interface BookLevel {

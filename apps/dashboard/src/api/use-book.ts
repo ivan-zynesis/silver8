@@ -1,11 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { BookView, ServerEvent } from '../types.js';
+import { useGatewayConnection, type GatewayConnectionState } from './gateway-connection.js';
 
-export type BookConnectionState =
-  | { kind: 'idle' }
-  | { kind: 'connecting' }
-  | { kind: 'open' }
-  | { kind: 'closed'; reason: string };
+export type BookConnectionState = GatewayConnectionState;
 
 interface UseBookResult {
   view: BookView | null;
@@ -15,44 +12,28 @@ interface UseBookResult {
 }
 
 /**
- * Open a WS connection to the gateway and subscribe to the given URI.
- * Emits the latest BookView (snapshot or update) and surface-level events.
- *
- * The WS gateway's port (default 3001) is separate from the HTTP port. We
- * derive the URL from the page's hostname so it works behind the dev proxy
- * and in production (when the hub serves the dashboard from the same host).
+ * Subscribe to a market topic via the shared dashboard WebSocket connection
+ * (see GatewayConnectionProvider). Returns the latest BookView for `uri` and
+ * the underlying connection state. The shared connection's refcount handles
+ * dedup when multiple consumers ask for the same URI; closing the last
+ * consumer triggers `unsubscribe` on the wire.
  */
-export function useBookSubscription(uri: string | null, port = 3001): UseBookResult {
+export function useBookSubscription(uri: string | null): UseBookResult {
+  const conn = useGatewayConnection();
   const [view, setView] = useState<BookView | null>(null);
-  const [connection, setConnection] = useState<BookConnectionState>({ kind: 'idle' });
   const [lastNotice, setLastNotice] = useState<ServerEvent | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     if (!uri) {
       setView(null);
-      setConnection({ kind: 'idle' });
+      setLastNotice(null);
       return;
     }
 
-    const url = `ws://${window.location.hostname}:${port}/`;
-    setConnection({ kind: 'connecting' });
     setView(null);
+    setLastNotice(null);
 
-    const ws = new WebSocket(url);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      setConnection({ kind: 'open' });
-      ws.send(JSON.stringify({ op: 'subscribe', resource: uri }));
-    };
-    ws.onmessage = (ev) => {
-      let msg: ServerEvent;
-      try {
-        msg = JSON.parse(ev.data) as ServerEvent;
-      } catch {
-        return;
-      }
+    const off = conn.subscribe(uri, (msg) => {
       switch (msg.event) {
         case 'snapshot':
         case 'update':
@@ -70,26 +51,10 @@ export function useBookSubscription(uri: string | null, port = 3001): UseBookRes
         default:
           break;
       }
-    };
-    ws.onerror = () => {
-      setConnection({ kind: 'closed', reason: 'error' });
-    };
-    ws.onclose = (e) => {
-      setConnection({ kind: 'closed', reason: e.reason || `code ${e.code}` });
-    };
+    });
 
-    return () => {
-      try {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ op: 'unsubscribe', resource: uri }));
-        }
-      } catch {
-        // ignore
-      }
-      ws.close();
-      wsRef.current = null;
-    };
-  }, [uri, port]);
+    return off;
+  }, [uri, conn]);
 
-  return { view, connection, lastNotice };
+  return { view, connection: conn.state, lastNotice };
 }
