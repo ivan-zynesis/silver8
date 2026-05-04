@@ -31,7 +31,11 @@ Existing ADRs that remain load-bearing for this initiative: DEC-007 (venue adapt
 
 ## Milestones
 
-- [ ] **catalog-as-adapter-capability**: Define catalog capability on `VenueAdapter` (`TopicDescriptor` type; `listCatalog()`; `describeCatalogEntry(uri)`; `catalogReady`; optional `onCatalogChange`). `CoinbaseAdapter` ships hardcoded common-pair set. `/status` payload renames `topics` → `active` and adds `catalog`. MCP `list_topics()` and `describe_topic()` ground in catalog. WS gateway rejects non-catalog subscribes with the enumerated helpful-error pattern from DEC-015. `/readyz` gates on `adapter.catalogReady`. Dashboard reads `/status.catalog` for the symbol selector. Tests cover empty-active + populated-catalog, non-catalog subscribe rejection, and readiness gating on catalog.
+- [x] **catalog-as-adapter-capability**: `TopicDescriptor` and `VenueAdapterCatalog` interfaces in `@silver8/core`. `CoinbaseAdapter` ships `COINBASE_DEFAULT_SYMBOLS` hardcoded constant (BTC-USD, ETH-USD, SOL-USD, AVAX-USD, DOGE-USD, XRP-USD, LINK-USD, MATIC-USD) and implements the catalog interface. `IngestionModule` exposes `VENUE_ADAPTER_CATALOG` DI token. `/status` payload renamed `topics` → `active` and adds `catalog`; HTTP and MCP parity preserved. MCP `list_topics`, `describe_topic`, resource registration, and bus subscription wiring source from catalog. WS gateway rejects non-catalog subscribes with `unknown_topic` error and enumerated alternatives. `IngestionService` declares `'ingestion.catalog'` readiness component (DEC-033). Dashboard reads `status.catalog` for the symbol picker; renders separate "Active topics" + "Catalog" sections. `COINBASE_SYMBOLS` env var removed. Tests: 5 new for `coinbase-catalog`; 1 new for WS catalog-rejection; status-builder + tools tests rewritten for the split. Smoke verified end-to-end. Docs swept (overview, MCP reference, topics, failure modes, WS gateway, README). _Completed 2026-05-05; opsx change `2026-05-05-catalog-as-adapter-capability`._
+
+## OPSX Changes
+
+- `2026-05-05-catalog-as-adapter-capability` (archived)
 
 ## Notes
 
