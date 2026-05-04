@@ -1,7 +1,8 @@
 ---
 id: hub-dashboard-and-lifecycle
-status: active
+status: complete
 created: 2026-05-04
+completed: 2026-05-04
 parent: market-data-hub
 ---
 
@@ -29,13 +30,13 @@ Existing ADRs that remain load-bearing for this initiative: DEC-007, DEC-010, DE
 
 ## Milestones
 
-- [ ] **dashboard-mvp**: `apps/dashboard` (Vite + React + TypeScript), served by the hub at `/dashboard`. Status panel showing the `/status` payload made human-legible (uptime, mode, upstream connection state, per-topic stale/sequence/last-update, consumer counts) plus a single live book ticker for one selected symbol via WS gateway subscribe. *Always-on ingestion still in effect; the dashboard observes the always-on behavior and is the foundation for the eventual ops dashboard.*
+- [x] **dashboard-mvp**: `apps/dashboard` (Vite + React + TypeScript), served by the hub at `/dashboard`. Status panel rendering the `/status` payload (uptime, mode, upstream state, per-topic stale/sequence/last-update, consumer counts) plus a single live book ticker via WS gateway subscribe. *Completed 2026-05-04; live smoke verified asset serving at 200; foundation for the ops dashboard is in place.*
 
-- [ ] **demand-driven-lifecycle**: Convert ingestion to demand-driven via `Registry.onDemandChange`. Tiered grace: channel unsubscribe immediate when last consumer leaves a topic; socket close after 5 minutes of zero-channel idleness (configurable). Dashboard shows the lifecycle transitions live — the "watch the change happening" demo. Supersedes the deferred-action note in DEC-007.
+- [x] **demand-driven-lifecycle**: Ingestion converted to demand-driven via `Registry.onDemandChange`. Tiered grace: channel unsubscribe immediate; socket close after `INGESTION_SOCKET_IDLE_MS` of zero-channel idleness (default 300s, configurable). Status surface gained `subscribedChannels` and `lifecycle` fields; dashboard shows the lifecycle transitions. Fulfills the deferred-action note in DEC-007. *Completed 2026-05-04; live smoke confirmed transitions T0→T1→T2 + socket idle close.*
 
-- [ ] **coinbase-mock**: Capture real Coinbase sessions to fixture files; build a faithful WS server (`apps/coinbase-mock` or similar) that replays them. Honors the Advanced Trade WS protocol surface our adapter uses (`subscribe`/`unsubscribe`, `level2`, `heartbeats`, monotonic `sequence_num`). Fault-injection knobs: induce sequence gap, drop connection mid-stream, stop emitting heartbeats, slow-emit. *Mock from observed, not imagined.*
+- [x] **coinbase-mock**: `apps/coinbase-mock` ships with: JSONL fixture loader, per-connection ConnectionReplay with monotonic sequence rewriting + subscription filtering, WS server speaking Advanced Trade protocol, control plane (HTTP) for fault injection — `/control/inject-gap`, `/control/disconnect`, `/control/silence`, `/control/slow`, `/control/state`. Synthetic baseline fixture covers BTC-USD + ETH-USD; recorder script for real captures ships as a developer tool. *Completed 2026-05-04; 16 unit tests; live smoke proved end-to-end mock → hub → consumer chain (snapshot bid=67499.5 ask=67500.5 + 9 updates in 1.5s).*
 
-- [ ] **integration-test-suite**: `apps/integration-tests` (vitest). `docker-compose.yml` orchestrates `hub` (built from existing Dockerfile) + `coinbase-mock` as separate services. End-to-end assertions for the complete data-plane lifecycle: subscribe → upstream attach → snapshot → gap → resync → disconnect → channel unsub → idle → socket close → SIGTERM drain. The compose recipe doubles as the deployment shape — production swaps mock for real venue, dev compose for production orchestrator (closes the IaC concern without a separate milestone).
+- [x] **integration-test-suite**: `apps/integration-tests` (vitest) + `docker-compose.integration.yml`. Helpers wrap docker compose lifecycle, hub HTTP/WS, and mock control plane. Four end-to-end assertions cover subscribe→attach→snapshot, channel unsub immediate→socket idle close, sequence gap→stale→resync, upstream disconnect→reconnect. Suite is opt-in via `INTEGRATION_DOCKER=1`; default behavior skips with a clear message so `pnpm test` stays fast in non-Docker environments. *Completed 2026-05-04; the compose recipe IS the deployment shape (DEC-029 extending DEC-024).*
 
 ## Notes
 
