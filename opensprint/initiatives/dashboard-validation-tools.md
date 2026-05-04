@@ -37,7 +37,11 @@ Existing ADRs that remain load-bearing for this initiative:
 
 ## Milestones
 
-- [ ] **multi-tab-and-onboarding**: In-app tab UI on the book ticker so a single dashboard window can subscribe to multiple `market://...` URIs over one WS connection, with per-tab BookTicker rendering and tab-level subscribe/unsubscribe (DEC-027 lifecycle visible). MCP onboarding panel shipping Claude Desktop config snippets for both transports, with the active transport (per `/status.mcp.transport`) presented as copy-paste-ready and the inactive transport shown informationally with the env-var instruction. `/status` payload extended with `mcp: { transport, path }`; HTTP `/status` and MCP `get_hub_status` keep payload parity. Tests: dashboard-side rendering checks where feasible; status-builder asserts the `mcp` block; smoke verifies the onboarding panel shows the configured transport and a connecting MCP client succeeds with the rendered snippet.
+- [x] **multi-tab-and-onboarding**: `GatewayConnectionProvider` (React context) owns one WS per dashboard window with refcounted per-URI subscriptions; `useBookSubscription` consumes it. New `TickerTabs` component drives in-app tabs over the shared connection (Scenario A: one WS, many subscriptions; closing the last tab on a symbol triggers DEC-027 channel unsub). New `McpOnboarding` panel renders Claude Desktop config snippets for both transports with the active transport (per `/status.mcp`) badged and copy-paste-ready and the inactive transport shown informationally with the `MCP_TRANSPORT=...` instruction. `/status` and MCP `get_hub_status` gain an additive `mcp: { transport, path }` block. Pure refcount/dispatch logic factored into `createSubscriptionMux` for unit tests. Cleanup: removed leftover `COINBASE_SYMBOLS` env from `docker-compose.yml`. Tests: 6 new gateway-connection tests, 2 new status-builder tests for the `mcp` block. Smoke verified one-WS multi-sub end-to-end. Docs swept (01-getting-started, 02-mcp-tool-reference, 08-architecture). _Completed 2026-05-05; opsx change `2026-05-05-multi-tab-and-onboarding`._
+
+## OPSX Changes
+
+- `2026-05-05-multi-tab-and-onboarding` (archived)
 
 ## Notes
 
