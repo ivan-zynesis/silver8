@@ -25,7 +25,9 @@ export class MonolithModule {
 
         IngestionModule.forRoot({
           venues: [{ venue: 'coinbase', symbols: symbolsFromEnv(env) }],
-          requireUpstreamForReady: true,
+          lifecycle: env.INGESTION_LIFECYCLE,
+          socketIdleMs: env.INGESTION_SOCKET_IDLE_MS,
+          coinbase: { url: env.COINBASE_WS_URL },
         }),
 
         GatewayWsModule.forRoot({

@@ -17,12 +17,21 @@ export interface CoinbaseAdapterConfig {
   /** Reconnect backoff bounds. */
   reconnectInitialMs: number;
   reconnectMaxMs: number;
+  /**
+   * After the last channel is unsubscribed and zero channels remain, close the
+   * upstream socket if it stays idle for this long. `0` disables the idle close
+   * entirely (useful for tests / eager mode).
+   */
+  socketIdleMs: number;
 }
 
 export interface AdapterStatus {
-  status: 'connected' | 'connecting' | 'disconnected' | 'reconnecting';
+  status: 'connected' | 'connecting' | 'disconnected' | 'reconnecting' | 'idle';
   connectedAt?: string;
+  /** Configured symbols (the upper bound on what *could* be subscribed). */
   symbols: string[];
+  /** Symbols currently subscribed upstream (DEC-027 channel-level demand state). */
+  subscribedChannels: string[];
   lastMessageAt?: string;
   reconnectAttempts: number;
 }
@@ -38,8 +47,12 @@ export class CoinbaseAdapter {
   private reconnectAttempts = 0;
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
+  private idleTimer: NodeJS.Timeout | null = null;
   private stopRequested = false;
   private resubscribePending = false;
+  /** Symbols whose channels (level2 + heartbeats) we're currently subscribed to upstream. */
+  private readonly subscribedChannels = new Set<string>();
+  private connectWaiters: Array<{ resolve: () => void; reject: (e: Error) => void }> = [];
 
   constructor(
     @Inject(COINBASE_ADAPTER_CONFIG) private readonly config: CoinbaseAdapterConfig,
@@ -50,12 +63,22 @@ export class CoinbaseAdapter {
       onSequenceGap: (gap) => this.handleSequenceGap(gap),
       onMessage: () => this.markLastMessage(),
     });
-    this.handler.setSubscribedTopics(this.config.symbols.map((s) => topicFor(s)));
   }
 
-  start(): void {
+  /**
+   * Begin operating. In demand-driven mode (DEC-027) this is a no-op until the
+   * first call to subscribeChannels(); the socket stays closed until demand
+   * exists. In eager mode the caller passes preSubscribe=true and we connect
+   * + subscribe everything at once.
+   */
+  start(opts: { preSubscribe?: string[] } = {}): void {
     this.stopRequested = false;
-    this.connect();
+    if (opts.preSubscribe && opts.preSubscribe.length > 0) {
+      this.subscribeChannels(opts.preSubscribe);
+    } else {
+      // demand-driven idle
+      this.status = 'idle';
+    }
   }
 
   async stop(): Promise<void> {
@@ -63,15 +86,59 @@ export class CoinbaseAdapter {
     this.clearTimers();
     if (this.ws) {
       try {
-        this.unsubscribe(this.config.symbols);
+        const subs = [...this.subscribedChannels];
+        if (subs.length > 0) this.sendUnsubscribe(subs);
       } catch {
         // best effort
       }
       this.ws.close();
       this.ws = null;
     }
+    this.subscribedChannels.clear();
     this.status = 'disconnected';
     upstreamConnectionStatus.set({ venue: 'coinbase' }, 0);
+    this.rejectConnectWaiters(new Error('adapter stopping'));
+  }
+
+  /**
+   * Subscribe upstream channels for the given symbols. Idempotent; symbols
+   * already subscribed are skipped. If the socket isn't connected, this opens
+   * it; the upstream subscribe ops fire on 'open'.
+   */
+  subscribeChannels(symbols: string[]): void {
+    const fresh = symbols.filter((s) => !this.subscribedChannels.has(s));
+    for (const s of fresh) this.subscribedChannels.add(s);
+    this.handler.setSubscribedTopics(
+      [...this.subscribedChannels].map((s) => topicFor(s)),
+    );
+    if (fresh.length === 0) return;
+
+    this.cancelIdleTimer();
+    this.ensureConnecting();
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.sendSubscribe(fresh);
+    }
+    // else: 'open' handler subscribes everything in this.subscribedChannels.
+  }
+
+  /**
+   * Unsubscribe upstream channels for the given symbols. Last-channel
+   * unsubscribe arms the socket-idle timer (DEC-027 socket-level grace).
+   */
+  unsubscribeChannels(symbols: string[]): void {
+    const present = symbols.filter((s) => this.subscribedChannels.has(s));
+    for (const s of present) this.subscribedChannels.delete(s);
+    this.handler.setSubscribedTopics(
+      [...this.subscribedChannels].map((s) => topicFor(s)),
+    );
+    if (present.length === 0) return;
+
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.sendUnsubscribe(present);
+    }
+    if (this.subscribedChannels.size === 0) {
+      this.armIdleTimer();
+    }
   }
 
   getStatus(): AdapterStatus {
@@ -79,9 +146,27 @@ export class CoinbaseAdapter {
       status: this.status,
       ...(this.connectedAt ? { connectedAt: this.connectedAt } : {}),
       symbols: [...this.config.symbols],
+      subscribedChannels: [...this.subscribedChannels],
       ...(this.lastMessageAt ? { lastMessageAt: this.lastMessageAt } : {}),
       reconnectAttempts: this.reconnectAttempts,
     };
+  }
+
+  /** Convenience for tests / eager-mode callers waiting for the open socket. */
+  async waitForConnected(timeoutMs = 5_000): Promise<void> {
+    if (this.ws?.readyState === WebSocket.OPEN) return;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('connect timeout')), timeoutMs);
+      this.connectWaiters.push({
+        resolve: () => { clearTimeout(timer); resolve(); },
+        reject:  (e) => { clearTimeout(timer); reject(e); },
+      });
+    });
+  }
+
+  private ensureConnecting(): void {
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
+    this.connect();
   }
 
   private connect(): void {
@@ -101,9 +186,13 @@ export class CoinbaseAdapter {
       this.connectedAt = new Date().toISOString();
       this.reconnectAttempts = 0;
       upstreamConnectionStatus.set({ venue: 'coinbase' }, 1);
-      this.logger.info({ symbols: this.config.symbols }, 'connected; subscribing');
-      this.subscribe(this.config.symbols);
+      const subs = [...this.subscribedChannels];
+      this.logger.info({ subscribedChannels: subs }, 'connected; (re)subscribing tracked channels');
+      if (subs.length > 0) {
+        this.sendSubscribe(subs);
+      }
       this.armHeartbeatWatchdog();
+      this.resolveConnectWaiters();
     });
 
     ws.on('message', (data) => {
@@ -130,10 +219,17 @@ export class CoinbaseAdapter {
     ws.on('close', (code, reason) => {
       this.logger.warn({ code, reason: reason.toString() }, 'coinbase ws closed');
       upstreamConnectionStatus.set({ venue: 'coinbase' }, 0);
-      this.status = 'disconnected';
       this.clearTimers();
       this.handler.resetSequence();
-      this.scheduleReconnect();
+      this.rejectConnectWaiters(new Error(`ws closed before open (code ${code})`));
+      // If we still have subscribed channels, reconnect to restore service.
+      // Otherwise (idle close, or all channels unsubscribed), park in 'idle'.
+      if (this.subscribedChannels.size > 0) {
+        this.status = 'disconnected';
+        this.scheduleReconnect();
+      } else {
+        this.status = 'idle';
+      }
     });
 
     ws.on('error', (err) => {
@@ -142,8 +238,8 @@ export class CoinbaseAdapter {
     });
   }
 
-  private subscribe(symbols: string[]): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+  private sendSubscribe(symbols: string[]): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN || symbols.length === 0) return;
     this.send({
       type: 'subscribe',
       product_ids: symbols,
@@ -156,8 +252,8 @@ export class CoinbaseAdapter {
     });
   }
 
-  private unsubscribe(symbols: string[]): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+  private sendUnsubscribe(symbols: string[]): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN || symbols.length === 0) return;
     this.send({
       type: 'unsubscribe',
       product_ids: symbols,
@@ -177,16 +273,54 @@ export class CoinbaseAdapter {
   private async handleSequenceGap(_gap: SequenceGap): Promise<void> {
     if (this.resubscribePending) return;
     this.resubscribePending = true;
-    this.logger.warn('resubscribing to recover from sequence gap');
+    const symbols = [...this.subscribedChannels];
+    if (symbols.length === 0) {
+      this.resubscribePending = false;
+      return;
+    }
+    this.logger.warn({ symbols }, 'resubscribing to recover from sequence gap');
     try {
-      this.unsubscribe(this.config.symbols);
+      this.sendUnsubscribe(symbols);
       // Small delay to let unsubscribe ACK before re-sub.
       await new Promise((r) => setTimeout(r, 100));
       this.handler.resetSequence();
-      this.subscribe(this.config.symbols);
+      this.sendSubscribe(symbols);
     } finally {
       this.resubscribePending = false;
     }
+  }
+
+  private armIdleTimer(): void {
+    this.cancelIdleTimer();
+    if (this.config.socketIdleMs <= 0) return;  // idle close disabled
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = null;
+      if (this.subscribedChannels.size > 0) return;  // demand returned during the wait
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.logger.info(
+          { idleMs: this.config.socketIdleMs },
+          'upstream socket idle; closing per DEC-027 socket-level grace',
+        );
+        try { this.ws.close(1000, 'idle'); } catch { /* ignore */ }
+      }
+    }, this.config.socketIdleMs);
+  }
+
+  private cancelIdleTimer(): void {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
+  }
+
+  private resolveConnectWaiters(): void {
+    const waiters = this.connectWaiters.splice(0);
+    for (const w of waiters) w.resolve();
+  }
+
+  private rejectConnectWaiters(err: Error): void {
+    const waiters = this.connectWaiters.splice(0);
+    for (const w of waiters) w.reject(err);
   }
 
   private markLastMessage(): void {
@@ -225,6 +359,10 @@ export class CoinbaseAdapter {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    // idle timer is *not* cleared here: it intentionally survives across
+    // open/close cycles (e.g. an unexpected close while idle should still
+    // count down). It IS cleared when channels resubscribe (cancelIdleTimer)
+    // or when the adapter stops.
   }
 }
 
