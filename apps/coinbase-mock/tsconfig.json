@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src"
+  },
+  "include": ["src/**/*"]
+  // The recorder under scripts/ runs via `tsx scripts/record.ts` (developer tool);
+  // it's intentionally not part of the runtime build.
+}
