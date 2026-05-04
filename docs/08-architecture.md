@@ -39,7 +39,7 @@ One-page write-up of design choices and trade-offs. For full per-decision ration
 │  │           demand-change events  │                                  │
 │  └─────────────────────────────────┘                                  │
 │                                                                       │
-│  HTTP shell: /healthz /readyz /metrics /status /mcp                   │
+│  HTTP shell: /healthz /readyz /metrics /status /mcp /dashboard/       │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 

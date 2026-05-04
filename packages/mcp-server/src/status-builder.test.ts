@@ -128,4 +128,27 @@ describe('buildMcpStatus (DEC-022, DEC-032 parity)', () => {
     });
     expect(status.active[0].stale).toBe(true);
   });
+
+  it('includes the mcp block when supplied (dashboard-validation-tools)', () => {
+    const reg = new InMemoryRegistry();
+    const store = new InMemoryOrderBookStore();
+    const catalog = makeCatalog(['BTC-USD']);
+
+    const status = buildMcpStatus(reg, store, catalog, {
+      service: 's', mode: 'monolith', startedAtMs: Date.now(),
+      mcp: { transport: 'http', path: '/mcp' },
+    });
+    expect(status.mcp).toEqual({ transport: 'http', path: '/mcp' });
+  });
+
+  it('omits the mcp block when not supplied', () => {
+    const reg = new InMemoryRegistry();
+    const store = new InMemoryOrderBookStore();
+    const catalog = makeCatalog(['BTC-USD']);
+
+    const status = buildMcpStatus(reg, store, catalog, {
+      service: 's', mode: 'monolith', startedAtMs: Date.now(),
+    });
+    expect(status.mcp).toBeUndefined();
+  });
 });

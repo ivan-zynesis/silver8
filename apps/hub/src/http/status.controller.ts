@@ -10,6 +10,7 @@ import {
   type VenueAdapterCatalog,
 } from '@silver8/core';
 import { IngestionService } from '@silver8/ingestion';
+import { McpServerService } from '@silver8/mcp-server';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 
@@ -35,6 +36,7 @@ export class StatusController {
     @Inject(ENV) private readonly env: Env,
     @Inject(VENUE_ADAPTER_CATALOG) private readonly catalog: VenueAdapterCatalog,
     @Optional() private readonly ingestion?: IngestionService,
+    @Optional() private readonly mcp?: McpServerService,
   ) {}
 
   @Get('/status')
@@ -46,6 +48,7 @@ export class StatusController {
       this.env,
       this.startedAt,
       this.ingestion,
+      this.mcp,
     );
   }
 }
@@ -66,6 +69,8 @@ export interface HubStatus {
   }>;
   consumers: { ws: number; mcp: number; totalSubscriptions: number };
   upstream: Record<string, unknown>;
+  /** MCP transport + endpoint path so the dashboard can render a truthful onboarding snippet. */
+  mcp?: { transport: 'http' | 'stdio'; path: string };
 }
 
 export function buildStatus(
@@ -75,6 +80,7 @@ export function buildStatus(
   env: Env,
   startedAtMs: number,
   ingestion?: IngestionService,
+  mcp?: McpServerService,
 ): HubStatus {
   const regStatus = registry.status();
 
@@ -119,5 +125,6 @@ export function buildStatus(
       totalSubscriptions: regStatus.totalSubscriptions,
     },
     upstream,
+    ...(mcp ? { mcp: mcp.getMcpStatus() } : {}),
   };
 }

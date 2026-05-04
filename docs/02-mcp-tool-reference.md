@@ -136,10 +136,13 @@ If `stale: true`: the upstream feed has gapped and a resync is in progress; valu
       "symbols": ["BTC-USD","ETH-USD","SOL-USD","AVAX-USD","DOGE-USD","XRP-USD","LINK-USD","MATIC-USD"],
       "lastMessageAt": "…", "reconnectAttempts": 0, "booksKnown": 3
     }
-  }
+  },
+  "mcp": { "transport": "http", "path": "/mcp" }
 }
 ```
 
 `catalog` (DEC-030 / DEC-032) is the authoritative answer to "what could a consumer subscribe to?" — populated synchronously at startup. `active` lists currently-warm topics with consumer/freshness info; in demand-driven mode (DEC-027) it starts empty on a cold hub and grows as consumers subscribe.
+
+`mcp` reports the currently-running MCP transport and (for `http`) the mounted path. The dashboard reads this to render a truthful Claude Desktop config snippet in its onboarding panel; an agent can read it for the same reason. `path` is empty when `transport === "stdio"`.
 
 If `upstream.coinbase.status !== "connected"` *or* an active entry shows `stale: true`, expect tool calls for affected symbols to return stale data or `no book state yet` errors.

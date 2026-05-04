@@ -17,9 +17,12 @@ The hub boots and opens:
 | `http://localhost:3000/healthz` | Liveness — process alive |
 | `http://localhost:3000/readyz` | Readiness — true once first Coinbase snapshot lands |
 | `http://localhost:3000/metrics` | Prometheus exposition |
-| `http://localhost:3000/status` | JSON: uptime, upstream, topics, consumers |
+| `http://localhost:3000/status` | JSON: uptime, catalog, active topics, consumers, upstream, mcp |
 | `http://localhost:3000/mcp` | MCP HTTP+SSE transport (when `MCP_TRANSPORT=http`) |
+| `http://localhost:3000/dashboard/` | Operator dashboard (status, multi-tab book tickers, MCP onboarding) |
 | `ws://localhost:3001/` | WebSocket gateway |
+
+The dashboard's MCP onboarding section reads `/status.mcp` to render a Claude Desktop config snippet that reflects the *currently-running* hub, so the value you copy always points at this instance.
 
 ### Docker
 
