@@ -35,8 +35,12 @@ export class StatusController {
     @Inject(ORDER_BOOK_STORE) private readonly store: OrderBookStore,
     @Inject(ENV) private readonly env: Env,
     @Inject(VENUE_ADAPTER_CATALOG) private readonly catalog: VenueAdapterCatalog,
-    @Optional() private readonly ingestion?: IngestionService,
-    @Optional() private readonly mcp?: McpServerService,
+    // Explicit @Inject() (rather than relying on parameter type metadata) so
+    // dev mode (tsx watch / esbuild) resolves the token correctly. tsx does
+    // not emit design:paramtypes; NestJS would otherwise treat these as
+    // unresolved Optional and silently inject undefined.
+    @Optional() @Inject(IngestionService) private readonly ingestion?: IngestionService,
+    @Optional() @Inject(McpServerService) private readonly mcp?: McpServerService,
   ) {}
 
   @Get('/status')

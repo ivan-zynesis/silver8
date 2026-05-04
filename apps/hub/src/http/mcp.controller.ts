@@ -23,7 +23,9 @@ export class McpController {
   constructor(
     @Inject(ENV) private readonly env: Env,
     @Inject(LOGGER) private readonly logger: Logger,
-    @Optional() private readonly mcp?: McpServerService,
+    // Explicit @Inject() so dev mode (tsx watch / esbuild) resolves the
+    // token without relying on emitted parameter type metadata.
+    @Optional() @Inject(McpServerService) private readonly mcp?: McpServerService,
   ) {}
 
   @All('/mcp')

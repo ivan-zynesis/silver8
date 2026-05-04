@@ -9,7 +9,7 @@
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/main.js",
-    "dev": "tsx watch src/main.ts"
+    "dev": "MODE=monolith tsx watch src/main.ts"
   },
   "dependencies": {
     "@fastify/static": "^7.0.4",
