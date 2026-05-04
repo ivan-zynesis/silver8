@@ -45,6 +45,7 @@ export class MonolithModule {
         McpServerModule.forRoot({
           transport: env.MCP_TRANSPORT,
           httpPath: '/mcp',
+          httpPort: env.HTTP_PORT,
           drainDeadlineMs: env.DRAIN_DEADLINE_MS,
         }),
       ],

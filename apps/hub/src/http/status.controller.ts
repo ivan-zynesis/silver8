@@ -74,7 +74,7 @@ export interface HubStatus {
   consumers: { ws: number; mcp: number; totalSubscriptions: number };
   upstream: Record<string, unknown>;
   /** MCP transport + endpoint path so the dashboard can render a truthful onboarding snippet. */
-  mcp?: { transport: 'http' | 'stdio'; path: string };
+  mcp?: { transport: 'http' | 'stdio'; path: string; port?: number };
 }
 
 export function buildStatus(

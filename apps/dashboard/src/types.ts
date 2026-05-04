@@ -42,6 +42,8 @@ export interface HubStatus {
   mcp?: {
     transport: 'http' | 'stdio';
     path: string;
+    /** HTTP port when transport='http'; absent for stdio. */
+    port?: number;
   };
 }
 

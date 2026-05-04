@@ -361,11 +361,15 @@ export class McpServerService
    * its payload, keeping HTTP `/status` and MCP `get_hub_status` at parity
    * (DEC-022).
    */
-  getMcpStatus(): { transport: 'http' | 'stdio'; path: string } {
-    return {
-      transport: this.config.transport,
-      path: this.config.transport === 'http' ? this.config.httpPath : '',
-    };
+  getMcpStatus(): { transport: 'http' | 'stdio'; path: string; port?: number } {
+    if (this.config.transport === 'http') {
+      return {
+        transport: 'http',
+        path: this.config.httpPath,
+        port: this.config.httpPort,
+      };
+    }
+    return { transport: 'stdio', path: '' };
   }
 
   // === Stdio transport ===

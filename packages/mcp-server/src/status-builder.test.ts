@@ -136,9 +136,9 @@ describe('buildMcpStatus (DEC-022, DEC-032 parity)', () => {
 
     const status = buildMcpStatus(reg, store, catalog, {
       service: 's', mode: 'monolith', startedAtMs: Date.now(),
-      mcp: { transport: 'http', path: '/mcp' },
+      mcp: { transport: 'http', path: '/mcp', port: 3000 },
     });
-    expect(status.mcp).toEqual({ transport: 'http', path: '/mcp' });
+    expect(status.mcp).toEqual({ transport: 'http', path: '/mcp', port: 3000 });
   });
 
   it('omits the mcp block when not supplied', () => {

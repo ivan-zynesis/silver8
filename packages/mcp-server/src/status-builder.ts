@@ -22,6 +22,12 @@ export interface McpStatus {
   transport: 'http' | 'stdio';
   /** Mounted HTTP path when transport='http' (e.g. '/mcp'). Empty for stdio. */
   path: string;
+  /**
+   * HTTP port when transport='http'. Surfaced so the dashboard can build a
+   * URL pointing at the hub directly rather than at the page's host:port
+   * (which differs when the dashboard is served via Vite dev proxy).
+   */
+  port?: number;
 }
 
 export interface McpHubStatus {

@@ -40,8 +40,15 @@ export function McpOnboarding({ status }: Props) {
     );
   }
 
-  const { transport, path } = status.mcp;
-  const httpUrl = `http://${window.location.host}${path || '/mcp'}`;
+  const { transport, path, port } = status.mcp;
+  // Build the URL pointing at the hub directly, NOT at window.location —
+  // the dashboard may be served via Vite dev (port 5173) while the hub
+  // listens on a different port (default 3000). External clients like
+  // Claude Desktop need the hub's actual address, not the page's.
+  const httpUrl =
+    transport === 'http' && port
+      ? `http://${window.location.hostname}:${port}${path || '/mcp'}`
+      : `http://${window.location.host}${path || '/mcp'}`;
 
   // Claude Desktop config — bridge form: spawn `mcp-remote` over stdio,
   // bridge to the hub's HTTP endpoint. Works whenever the hub has HTTP
