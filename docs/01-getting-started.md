@@ -75,7 +75,38 @@ curl -sS -X POST http://localhost:3000/mcp \
 
 ## 4. Connect via MCP — stdio (for local agent installations)
 
-Set `MCP_TRANSPORT=stdio` and have your agent spawn the hub binary. The hub speaks MCP over stdin/stdout. For Claude Desktop, register a server entry that points to the hub's launch command.
+Set `MCP_TRANSPORT=stdio` and have your agent spawn the hub binary. The hub speaks MCP over stdin/stdout.
+
+### Claude Desktop
+
+Claude Desktop's `claude_desktop_config.json` only accepts stdio entries (`command` / `args` / `env`); it does not accept a bare HTTP URL. Two correct shapes:
+
+**Bridge to a running HTTP hub** (one hub serves both the dashboard and Claude Desktop):
+```json
+{
+  "mcpServers": {
+    "silver8": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://localhost:3000/mcp"]
+    }
+  }
+}
+```
+
+**Spawn a local stdio hub** (Claude Desktop launches its own instance):
+```json
+{
+  "mcpServers": {
+    "silver8": {
+      "command": "node",
+      "args": ["/path/to/silver8/apps/hub/dist/main.js"],
+      "env": { "MODE": "monolith", "MCP_TRANSPORT": "stdio" }
+    }
+  }
+}
+```
+
+The dashboard's "Connect an agent (MCP)" panel renders both with copy-paste buttons and the right URL for your running hub. Restart Claude Desktop after saving the config.
 
 ## 5. Connect via WebSocket
 

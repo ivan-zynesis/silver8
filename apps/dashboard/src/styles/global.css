@@ -241,3 +241,10 @@ code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-
   cursor: pointer;
 }
 .copy-button:hover { background: rgba(79, 140, 255, 0.18); }
+
+.snippet__reference {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--panel-border);
+}
+.snippet__reference .snippet__title { display: block; margin-bottom: 4px; }

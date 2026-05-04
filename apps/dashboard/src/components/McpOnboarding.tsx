@@ -7,12 +7,17 @@ interface Props {
 
 /**
  * MCP onboarding panel — copy-paste config for connecting an agent
- * (Claude Desktop) to this hub. The active transport (per status.mcp) is the
- * headline copy-paste-ready snippet; the inactive transport is shown
- * informationally with the env-var instruction to switch.
+ * (Claude Desktop) to this hub.
  *
- * DS-OPERATOR-USABILITY: keep the snippet truthful. Don't display
- * connection info that isn't currently working.
+ * Claude Desktop's `claude_desktop_config.json` only accepts stdio
+ * `command/args/env` server entries — it does NOT accept a bare HTTP URL.
+ * To consume the hub's HTTP transport from Claude Desktop, you spawn a
+ * stdio↔HTTP bridge (mcp-remote) via `command: npx, args: [-y, mcp-remote,
+ * <url>]`. The direct URL form is for MCP Inspector or other programmatic
+ * HTTP clients, not Claude Desktop.
+ *
+ * DS-OPERATOR-USABILITY: keep snippets truthful. Don't display
+ * connection info that won't actually work.
  */
 export function McpOnboarding({ status }: Props) {
   if (!status) {
@@ -38,18 +43,28 @@ export function McpOnboarding({ status }: Props) {
   const { transport, path } = status.mcp;
   const httpUrl = `http://${window.location.host}${path || '/mcp'}`;
 
-  const httpSnippet = formatJson({
+  // Claude Desktop config — bridge form: spawn `mcp-remote` over stdio,
+  // bridge to the hub's HTTP endpoint. Works whenever the hub has HTTP
+  // transport active. This is the configuration to use if you want one hub
+  // to serve both the dashboard and Claude Desktop.
+  const claudeBridgeSnippet = formatJson({
     mcpServers: {
-      silver8: { url: httpUrl },
+      silver8: {
+        command: 'npx',
+        args: ['-y', 'mcp-remote', httpUrl],
+      },
     },
   });
 
-  const stdioSnippet = formatJson({
+  // Claude Desktop config — spawn-local form: Claude Desktop runs its own
+  // hub via stdio. Independent process from the dashboard hub. Use this if
+  // you don't want the bridge dependency or aren't running a separate hub.
+  const claudeStdioSnippet = formatJson({
     mcpServers: {
       silver8: {
         command: 'node',
         args: ['/path/to/silver8/apps/hub/dist/main.js'],
-        env: { MCP_TRANSPORT: 'stdio' },
+        env: { MODE: 'monolith', MCP_TRANSPORT: 'stdio' },
       },
     },
   });
@@ -64,34 +79,40 @@ export function McpOnboarding({ status }: Props) {
       </header>
 
       <p className="muted">
-        DEC-014 ships both transports. This hub is currently exposing
-        <strong> {transport === 'http' ? 'HTTP+SSE' : 'stdio'}</strong> — that's
-        the copy-paste-ready snippet below. The other transport is shown for
-        reference; switch by setting <code>MCP_TRANSPORT</code> and restarting
-        the hub.
+        Claude Desktop's config file only accepts stdio entries (
+        <code>command</code>/<code>args</code>/<code>env</code>). To use the
+        hub's HTTP transport, Claude Desktop spawns the <code>mcp-remote</code>
+        bridge — that's the snippet below. The direct HTTP URL is shown
+        separately for MCP Inspector and other programmatic clients.
       </p>
 
       <Snippet
-        title="HTTP+SSE"
+        title="Claude Desktop · bridge to running HTTP hub"
         active={transport === 'http'}
-        body={httpSnippet}
+        body={claudeBridgeSnippet}
         instruction={
           transport === 'http'
-            ? `Hub is exposing this transport at ${httpUrl}.`
-            : `Set MCP_TRANSPORT=http (default) and restart to use this.`
+            ? `Bridges Claude Desktop's stdio to ${httpUrl}. Claude Desktop spawns mcp-remote (npx); no extra install. Restart Claude Desktop after saving config.`
+            : 'Hub is currently running with stdio transport — there is no HTTP endpoint to bridge. Set MCP_TRANSPORT=http to expose one.'
         }
       />
 
       <Snippet
-        title="stdio"
-        active={transport === 'stdio'}
-        body={stdioSnippet}
-        instruction={
-          transport === 'stdio'
-            ? 'Hub is exposing this transport.'
-            : 'Set MCP_TRANSPORT=stdio and restart to use this. The args path is illustrative — point to your local build.'
-        }
+        title="Claude Desktop · spawn local stdio hub"
+        active={false}
+        body={claudeStdioSnippet}
+        instruction="Claude Desktop launches its own hub instance over stdio. Independent of the dashboard hub. Replace the path with your local checkout."
       />
+
+      {transport === 'http' && (
+        <div className="snippet__reference">
+          <div className="snippet__title">Direct HTTP endpoint</div>
+          <p className="muted">
+            For MCP Inspector or any HTTP MCP client (not Claude Desktop): {' '}
+            <code>{httpUrl}</code>
+          </p>
+        </div>
+      )}
     </section>
   );
 }
@@ -121,9 +142,7 @@ function Snippet({
     <div className={`snippet${active ? '' : ' snippet--inactive'}`}>
       <div className="snippet__header">
         <span className="snippet__title">{title}</span>
-        <span className={`pill ${active ? 'pill--connected' : 'pill--muted'}`}>
-          {active ? 'active' : 'alternative'}
-        </span>
+        {active && <span className="pill pill--connected">recommended</span>}
         <button type="button" className="copy-button" onClick={onCopy}>
           {copied ? 'copied!' : 'copy'}
         </button>
