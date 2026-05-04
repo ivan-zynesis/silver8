@@ -79,6 +79,7 @@ export function buildStatus(
     upstream.coinbase = {
       ...s.coinbase,
       booksKnown: s.topicsKnown.length,
+      lifecycle: s.lifecycle,
     };
   }
 

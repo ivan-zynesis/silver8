@@ -17,12 +17,14 @@ export interface HubStatus {
   consumers: { ws: number; mcp: number; totalSubscriptions: number };
   upstream: {
     coinbase?: {
-      status: 'connected' | 'connecting' | 'disconnected' | 'reconnecting';
+      status: 'connected' | 'connecting' | 'disconnected' | 'reconnecting' | 'idle';
       connectedAt?: string;
       symbols: string[];
+      subscribedChannels: string[];
       lastMessageAt?: string;
       reconnectAttempts: number;
       booksKnown: number;
+      lifecycle: 'demand_driven' | 'eager';
     };
   } & Record<string, unknown>;
 }

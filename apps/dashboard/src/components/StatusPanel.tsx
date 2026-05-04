@@ -43,6 +43,22 @@ export function StatusPanel({ status, loading, error }: Props) {
           }
         />
         <Cell
+          label="Lifecycle"
+          value={
+            upstream ? <code>{upstream.lifecycle}</code> : <span className="muted">—</span>
+          }
+        />
+        <Cell
+          label="Subscribed channels"
+          value={
+            upstream
+              ? upstream.subscribedChannels.length === 0
+                ? <span className="muted">none</span>
+                : <span className="mono">{upstream.subscribedChannels.join(', ')}</span>
+              : '—'
+          }
+        />
+        <Cell
           label="Books known"
           value={upstream ? `${upstream.booksKnown}` : '—'}
         />
