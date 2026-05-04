@@ -11,6 +11,7 @@ RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
 # Copy workspace manifests for dependency resolution.
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY apps/hub/package.json ./apps/hub/
+COPY apps/dashboard/package.json ./apps/dashboard/
 COPY packages/core/package.json ./packages/core/
 COPY packages/core-memory/package.json ./packages/core-memory/
 COPY packages/observability/package.json ./packages/observability/
@@ -54,6 +55,8 @@ COPY --from=build /app/packages/gateway-ws/dist ./packages/gateway-ws/dist
 COPY --from=build /app/packages/gateway-ws/package.json ./packages/gateway-ws/package.json
 COPY --from=build /app/packages/mcp-server/dist ./packages/mcp-server/dist
 COPY --from=build /app/packages/mcp-server/package.json ./packages/mcp-server/package.json
+# Dashboard SPA static assets — served by the hub at /dashboard/*.
+COPY --from=build /app/apps/dashboard/dist ./apps/dashboard/dist
 COPY --from=build /app/package.json ./package.json
 
 ENV NODE_ENV=production \

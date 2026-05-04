@@ -1,0 +1,147 @@
+/* Minimal, hand-rolled CSS for legibility. Production dashboard would adopt
+   a component library; MVP scope is "real foundation, minimal chrome." */
+
+:root {
+  --bg: #0f1115;
+  --panel: #161a22;
+  --panel-border: #232a36;
+  --text: #d8dde8;
+  --text-muted: #7d8696;
+  --accent: #4f8cff;
+  --bid: #4ade80;
+  --ask: #f87171;
+  --stale: #facc15;
+  --error: #ef4444;
+  --warn: #fb923c;
+  --ok: #4ade80;
+  --connecting: #60a5fa;
+  --disconnected: #9ca3af;
+
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { margin: 0; padding: 0; min-height: 100vh; }
+body { background: var(--bg); }
+
+code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; }
+
+.app {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+.app__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.app__header h1 { margin: 0; font-size: 22px; font-weight: 600; }
+.app__main {
+  display: grid;
+  gap: 16px;
+}
+.app__footer {
+  margin-top: 24px;
+  font-size: 11px;
+  text-align: center;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 16px 18px;
+}
+.panel h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; }
+.panel h3 { margin: 16px 0 8px; font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.panel--error { border-color: var(--error); }
+.panel__header { display: flex; justify-content: space-between; align-items: center; }
+
+.muted { color: var(--text-muted); }
+.error { color: var(--error); }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.grid--quote { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+
+.cell {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+.cell__label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.cell__value { font-size: 18px; font-weight: 600; margin-top: 4px; }
+.cell--bid .cell__value { color: var(--bid); }
+.cell--ask .cell__value { color: var(--ask); }
+
+.pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: lowercase;
+}
+.pill--connected { background: rgba(74, 222, 128, 0.15); color: var(--bid); }
+.pill--connecting { background: rgba(96, 165, 250, 0.15); color: var(--connecting); }
+.pill--disconnected { background: rgba(156, 163, 175, 0.15); color: var(--disconnected); }
+.pill--reconnecting { background: rgba(250, 204, 21, 0.15); color: var(--stale); }
+.pill--stale { background: rgba(250, 204, 21, 0.2); color: var(--stale); }
+.pill--muted { background: rgba(255, 255, 255, 0.05); color: var(--text-muted); }
+
+.banner {
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 8px 0;
+  font-size: 13px;
+}
+.banner--stale { background: rgba(250, 204, 21, 0.12); color: var(--stale); border: 1px solid rgba(250, 204, 21, 0.25); }
+.banner--ok    { background: rgba(74, 222, 128, 0.10); color: var(--ok); }
+.banner--warn  { background: rgba(251, 146, 60, 0.12); color: var(--warn); }
+.banner--error { background: rgba(239, 68, 68, 0.12); color: var(--error); }
+
+.topics {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.topics th, .topics td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--panel-border);
+}
+.topics th { color: var(--text-muted); font-weight: 500; text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; }
+.row--stale { background: rgba(250, 204, 21, 0.05); }
+
+.depth {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 8px;
+}
+.depth__side h3 { margin-top: 0; }
+.depth__side table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.depth__side th, .depth__side td { padding: 4px 8px; border-bottom: 1px solid var(--panel-border); text-align: right; }
+.depth__side th:first-child, .depth__side td:first-child { text-align: left; }
+.depth__side--bid td:first-child { color: var(--bid); }
+.depth__side--ask td:first-child { color: var(--ask); }
+
+.symbol-picker { display: flex; align-items: center; gap: 8px; }
+.symbol-picker select {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 14px;
+}

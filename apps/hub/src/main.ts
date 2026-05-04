@@ -1,4 +1,7 @@
 import 'reflect-metadata';
+import { existsSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { NestFactory } from '@nestjs/core';
 import {
   FastifyAdapter,
@@ -57,11 +60,47 @@ async function bootstrap(): Promise<void> {
 
   app.enableShutdownHooks();
 
+  // Serve the dashboard SPA at /dashboard if its build output is present.
+  // Production: copied into the image at build time. Dev: built via
+  // `pnpm --filter @silver8/dashboard build`. Missing dist => /dashboard 404s
+  // which is acceptable (the dashboard is a deliverable, not a hard requirement).
+  const dashboardDist = resolveDashboardDist();
+  if (dashboardDist) {
+    app.useStaticAssets({
+      root: dashboardDist,
+      prefix: '/dashboard/',
+      decorateReply: false,
+    });
+    bootLogger.info({ dashboardDist }, 'dashboard mounted at /dashboard');
+  } else {
+    bootLogger.warn(
+      'dashboard build not found; /dashboard will 404. Run `pnpm --filter @silver8/dashboard build`.',
+    );
+  }
+
   await app.listen(env.HTTP_PORT, '0.0.0.0');
   bootLogger.info(
     { httpPort: env.HTTP_PORT, mode: env.MODE },
-    'hub listening; /healthz /readyz /metrics /status available',
+    'hub listening; /healthz /readyz /metrics /status /dashboard available',
   );
+}
+
+/**
+ * Locate the dashboard's built static files. Tries a few candidates so the same
+ * binary works in dev (running from source via tsx) and in the production image
+ * (where main.js lives in apps/hub/dist next to the dashboard's dist).
+ */
+function resolveDashboardDist(): string | null {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    resolve(here, '../../dashboard/dist'),       // apps/hub/dist/.. → apps/dashboard/dist
+    resolve(here, '../../../apps/dashboard/dist'), // apps/hub/src/.. → repo/apps/dashboard/dist (when running from src)
+    resolve(process.cwd(), 'apps/dashboard/dist'),
+  ];
+  for (const c of candidates) {
+    if (existsSync(c)) return c;
+  }
+  return null;
 }
 
 bootstrap().catch((err) => {
