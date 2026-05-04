@@ -18,7 +18,12 @@ export default defineConfig({
   test: {
     globals: false,
     environment: 'node',
-    include: ['packages/**/src/**/*.test.ts', 'apps/**/src/**/*.test.ts'],
+    // No explicit `include`: vitest's default (`**/*.{test,spec}.?(c|m)[jt]s?(x)`)
+    // works correctly regardless of CWD. From the repo root it picks up tests in
+    // every package; turbo runs `vitest run` from each package's directory and
+    // the default pattern then matches only that package's files. The repo-wide
+    // workspace aliases above still apply because vitest walks up to find the
+    // nearest config.
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],
