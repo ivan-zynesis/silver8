@@ -61,11 +61,16 @@ export class McpController {
       close: () => Promise<void>;
     };
 
-    // Stateless mode: undefined sessionIdGenerator means each request stands alone.
+    // Stateless mode: undefined sessionIdGenerator means each request stands
+    // alone. The MCP SDK only allows one transport per McpServer, so a fresh
+    // server instance is created per request alongside the fresh transport.
+    // The shared singleton McpServerService.mcp is reserved for stdio (where
+    // it's connected once at bootstrap and lives for the process lifetime).
     const transport = new TransportCtor({ sessionIdGenerator: undefined });
+    const server = this.mcp.createPerRequestServer();
 
     try {
-      await this.mcp.mcp.connect(transport as never);
+      await server.connect(transport as never);
       await transport.handleRequest(req.raw, reply.raw, req.body);
     } catch (err) {
       this.logger.error({ err: { message: (err as Error).message } }, 'mcp http transport error');
@@ -74,6 +79,7 @@ export class McpController {
       }
     } finally {
       try { await transport.close(); } catch { /* ignore */ }
+      try { await server.close(); } catch { /* ignore */ }
     }
   }
 }

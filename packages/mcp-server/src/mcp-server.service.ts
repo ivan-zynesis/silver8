@@ -99,16 +99,49 @@ export class McpServerService
       catalog: this.catalog,
     };
 
-    this.registerTools();
-    this.registerResources();
-    this.wireResourceSubscriptions();
-
+    // For stdio transport: register tools/resources on the singleton McpServer
+    // and wire bus → resources/subscribe streaming. The singleton is
+    // connect()'d once to the stdio transport and lives for the process
+    // lifetime (one client, persistent connection).
+    //
+    // For HTTP transport: the singleton is unused. Each HTTP request gets its
+    // own fresh McpServer via createPerRequestServer() because the SDK only
+    // allows one transport per server, and stateless HTTP creates a new
+    // transport per request.
     if (this.config.transport === 'stdio') {
+      this.registerToolsOn(this.mcp);
+      this.registerResourcesOn(this.mcp);
+      this.wireResourceSubscriptions();
       await this.connectStdio();
     }
-    // HTTP transport is bound by the host app calling attachHttpTransport().
+
     this.readiness.set(READINESS_KEY, true);
     this.logger.info({ transport: this.config.transport }, 'mcp server ready');
+  }
+
+  /**
+   * Build a fresh McpServer with all tools and resources registered.
+   * Used by the HTTP controller for stateless per-request serving (DEC-014;
+   * the SDK's "one transport per server" rule means we can't share the
+   * singleton across HTTP requests). Resource-subscribe streaming via the
+   * bus is intentionally NOT wired here — that requires a long-lived
+   * transport and is only meaningful for stdio. HTTP clients that want
+   * streaming should connect via the stdio bridge (mcp-remote) or use the
+   * native WS gateway.
+   */
+  createPerRequestServer(): McpServer {
+    const server = new McpServer(
+      { name: 'silver8-market-data-hub', version: '0.1.0' },
+      {
+        capabilities: {
+          tools: {},
+          resources: { subscribe: false, listChanged: false },
+        },
+      },
+    );
+    this.registerToolsOn(server);
+    this.registerResourcesOn(server);
+    return server;
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -149,10 +182,10 @@ export class McpServerService
 
   // === Tools (DEC-015) ===
 
-  private registerTools(): void {
+  private registerToolsOn(server: McpServer): void {
     const symbols = catalogSymbols(this.toolDeps);
 
-    this.mcp.registerTool(
+    server.registerTool(
       'list_topics',
       {
         title: 'List available market data topics',
@@ -170,7 +203,7 @@ export class McpServerService
       },
     );
 
-    this.mcp.registerTool(
+    server.registerTool(
       'describe_topic',
       {
         title: 'Describe a topic',
@@ -189,7 +222,7 @@ export class McpServerService
     );
 
     const tobSchema = topOfBookSchema(symbols);
-    this.mcp.registerTool(
+    server.registerTool(
       'get_top_of_book',
       {
         title: 'Get top of book',
@@ -210,7 +243,7 @@ export class McpServerService
     );
 
     const snapSchema = bookSnapshotSchema(symbols);
-    this.mcp.registerTool(
+    server.registerTool(
       'get_book_snapshot',
       {
         title: 'Get order book snapshot',
@@ -228,7 +261,7 @@ export class McpServerService
       },
     );
 
-    this.mcp.registerTool(
+    server.registerTool(
       'get_hub_status',
       {
         title: 'Get hub status',
@@ -250,10 +283,10 @@ export class McpServerService
 
   // === Resources (DEC-013) ===
 
-  private registerResources(): void {
+  private registerResourcesOn(server: McpServer): void {
     for (const entry of this.catalog.listCatalog()) {
       const { uri, symbol } = entry;
-      this.mcp.registerResource(
+      server.registerResource(
         `book-${symbol}`,
         uri,
         {
