@@ -1,7 +1,8 @@
 ---
 id: market-data-hub
-status: active
+status: completed
 created: 2026-05-02
+completed: 2026-05-04
 deadline: 2026-05-04 (2-week sprint from issue date 2026-04-20)
 ---
 

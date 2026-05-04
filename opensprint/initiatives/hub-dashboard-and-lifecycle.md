@@ -1,6 +1,6 @@
 ---
 id: hub-dashboard-and-lifecycle
-status: complete
+status: completed
 created: 2026-05-04
 completed: 2026-05-04
 parent: market-data-hub
