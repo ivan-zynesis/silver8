@@ -17,9 +17,9 @@ export class InvalidUriError extends HubError {
 
 export class UnknownTopicError extends HubError {
   constructor(uri: string, available: string[]) {
-    const list = available.length > 0 ? available.slice(0, 10).join(', ') : '(none active)';
+    const list = available.length > 0 ? available.slice(0, 10).join(', ') : '(none available)';
     super(
-      `unknown topic ${uri}; active topics: ${list}${available.length > 10 ? ' …' : ''}`,
+      `unknown topic ${uri}; available topics: ${list}${available.length > 10 ? ' …' : ''}`,
       'unknown_topic',
     );
   }

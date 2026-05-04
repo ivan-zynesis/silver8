@@ -31,7 +31,7 @@ Resources are full URIs: `market://coinbase/book/BTC-USD`.
 | `fresh` | `{event, resource}` | Topic recovered from stale; expect a fresh `snapshot` next. |
 | `lagged` | `{event, resource, dropped}` | Per-consumer queue overflowed; `dropped` messages were evicted. Read faster or expect disconnect. |
 | `rebalance` | `{event, reason, deadlineMs}` | Hub is draining (SIGTERM); reconnect to land on a non-draining instance. |
-| `error` | `{event, code, message, id?}` | Op rejected or invalid. Codes: `protocol_error`, `invalid_uri`. |
+| `error` | `{event, code, message, id?}` | Op rejected or invalid. Codes: `protocol_error` (malformed JSON / op shape), `invalid_uri` (does not match `market://<venue>/<kind>/<symbol>`), `unknown_topic` (well-formed URI but not in the catalog — DEC-030; `message` enumerates available topics). |
 | `pong` | `{event, id?}` | Reply to `ping`. |
 
 ## Lifecycle

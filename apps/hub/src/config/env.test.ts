@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadEnv, symbolsFromEnv } from './env.js';
+import { loadEnv } from './env.js';
 
 describe('env loader', () => {
   it('applies defaults when nothing is set', () => {
@@ -30,15 +30,5 @@ describe('env loader', () => {
     expect(loadEnv({ LOG_PRETTY: 'true' }).LOG_PRETTY).toBe(true);
     expect(loadEnv({ LOG_PRETTY: '0' }).LOG_PRETTY).toBe(false);
     expect(loadEnv({}).LOG_PRETTY).toBe(false);
-  });
-
-  it('symbolsFromEnv splits and trims', () => {
-    expect(
-      symbolsFromEnv(loadEnv({ COINBASE_SYMBOLS: 'BTC-USD, ETH-USD ,SOL-USD' })),
-    ).toEqual(['BTC-USD', 'ETH-USD', 'SOL-USD']);
-  });
-
-  it('symbolsFromEnv tolerates empty entries', () => {
-    expect(symbolsFromEnv(loadEnv({ COINBASE_SYMBOLS: ',,BTC-USD,,' }))).toEqual(['BTC-USD']);
   });
 });

@@ -1,18 +1,25 @@
-import type { OrderBookStore, Registry, ResourceURI } from '@silver8/core';
+import type {
+  OrderBookStore,
+  Registry,
+  ResourceURI,
+  TopicDescriptor,
+  VenueAdapterCatalog,
+} from '@silver8/core';
 
 /**
  * Status payload shared between HTTP `/status` and MCP `get_hub_status`.
- * Defined here so both surfaces compile against the same shape (DEC-022).
+ * Defined here so both surfaces compile against the same shape (DEC-022, DEC-032).
  *
- * The actual builder in apps/hub/http/status.controller.ts is the canonical one;
- * the MCP tool delegates to a structurally-equivalent builder (we keep the two
- * separate to avoid a backwards dependency from a package onto the app).
+ * `catalog` answers "what could a consumer ask for?" (DEC-030); `active`
+ * answers "what is currently warm?" The two diverge in the demand-driven
+ * world (DEC-027) — a cold hub has populated catalog and empty active.
  */
 export interface McpHubStatus {
   service: string;
   mode: string;
   uptimeSeconds: number;
-  topics: Array<{
+  catalog: TopicDescriptor[];
+  active: Array<{
     uri: string;
     consumerCount: number;
     stale: boolean;
@@ -33,18 +40,19 @@ export interface StatusBuilderOptions {
 export function buildMcpStatus(
   registry: Registry,
   store: OrderBookStore,
+  catalog: VenueAdapterCatalog,
   opts: StatusBuilderOptions,
 ): McpHubStatus {
   const regStatus = registry.status();
   const consumersByTopic = new Map<string, number>(
     regStatus.byTopic.map((t) => [t.topic, t.consumerCount]),
   );
-  const allUris = new Set<string>([
+  const activeUris = new Set<string>([
     ...regStatus.byTopic.map((t) => t.topic),
     ...store.knownTopics(),
   ]);
 
-  const topics = Array.from(allUris).map((uri) => {
+  const active = Array.from(activeUris).map((uri) => {
     const tob = store.getTopOfBook(uri as ResourceURI);
     return {
       uri,
@@ -59,7 +67,8 @@ export function buildMcpStatus(
     service: opts.service,
     mode: opts.mode,
     uptimeSeconds: Math.floor((Date.now() - opts.startedAtMs) / 1000),
-    topics,
+    catalog: [...catalog.listCatalog()],
+    active,
     consumers: {
       ws: regStatus.consumersBySurface.ws,
       mcp: regStatus.consumersBySurface.mcp,

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryOrderBookStore } from '@silver8/core-memory';
+import type {
+  ResourceURI,
+  TopicDescriptor,
+  VenueAdapterCatalog,
+} from '@silver8/core';
 import {
   bookSnapshotSchema,
   describeTopic,
@@ -12,6 +17,23 @@ import {
 
 const SYMBOLS = ['BTC-USD', 'ETH-USD', 'SOL-USD'];
 
+function makeCatalog(symbols: string[]): VenueAdapterCatalog {
+  const entries: TopicDescriptor[] = symbols.map((symbol) => ({
+    uri: `market://coinbase/book/${symbol}` as ResourceURI,
+    kind: 'book',
+    venue: 'coinbase',
+    symbol,
+    description: `Top-of-book and depth-N L2 order book for ${symbol} on Coinbase. Updates on every level change.`,
+  }));
+  const byUri = new Map(entries.map((e) => [e.uri, e]));
+  return {
+    venue: 'coinbase',
+    listCatalog: () => entries,
+    describeCatalogEntry: (uri) => byUri.get(uri),
+    catalogReady: true,
+  };
+}
+
 function makeDeps(): ToolDeps {
   const store = new InMemoryOrderBookStore();
   store.applySnapshot('market://coinbase/book/BTC-USD' as never, {
@@ -22,7 +44,7 @@ function makeDeps(): ToolDeps {
     bids: [{ price: 50000, size: 1 }, { price: 49999, size: 2 }, { price: 49998, size: 3 }],
     asks: [{ price: 50001, size: 0.5 }, { price: 50002, size: 1 }],
   });
-  return { store, configuredSymbols: SYMBOLS };
+  return { store, catalog: makeCatalog(SYMBOLS) };
 }
 
 describe('listConfiguredTopics', () => {
@@ -44,10 +66,12 @@ describe('describeTopic', () => {
     expect(result.freshness.sequence).toBe(100);
   });
 
-  it('throws actionable error on unknown symbol', () => {
+  it('throws actionable error on URI not in catalog', () => {
     expect(() =>
       describeTopic({ uri: 'market://coinbase/book/UNKNOWN' }, makeDeps()),
-    ).toThrow(/unknown symbol UNKNOWN; available symbols: BTC-USD, ETH-USD, SOL-USD/);
+    ).toThrow(
+      /unknown topic market:\/\/coinbase\/book\/UNKNOWN; available topics: market:\/\/coinbase\/book\/BTC-USD, market:\/\/coinbase\/book\/ETH-USD, market:\/\/coinbase\/book\/SOL-USD/,
+    );
   });
 });
 

@@ -62,7 +62,14 @@ export async function waitFor<T>(
 
 export interface HubStatus {
   mode: string;
-  topics: Array<{
+  catalog: Array<{
+    uri: string;
+    kind: 'book';
+    venue: string;
+    symbol: string;
+    description: string;
+  }>;
+  active: Array<{
     uri: string;
     consumerCount: number;
     stale: boolean;

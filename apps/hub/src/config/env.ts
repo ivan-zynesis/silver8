@@ -20,8 +20,6 @@ const ENV_SCHEMA = z.object({
     .default(false),
 
   COINBASE_WS_URL: z.string().url().default('wss://advanced-trade-ws.coinbase.com'),
-  /** Comma-separated symbols, e.g. "BTC-USD,ETH-USD,SOL-USD". */
-  COINBASE_SYMBOLS: z.string().default('BTC-USD,ETH-USD,SOL-USD'),
 
   /**
    * Ingestion lifecycle (DEC-027).
@@ -53,10 +51,4 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     throw new Error(`Invalid environment configuration:\n${issues}`);
   }
   return parsed.data;
-}
-
-export function symbolsFromEnv(env: Env): string[] {
-  return env.COINBASE_SYMBOLS.split(',')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
 }

@@ -6,11 +6,11 @@ Every tool is a JSON-RPC `tools/call` against a name with strongly-typed Zod-der
 
 ## `list_topics()`
 
-**When to use.** First thing to call on a fresh session. Discovers what topics exist.
+**When to use.** First thing to call on a fresh session. Discovers what topics exist. The catalog is authoritative — `list_topics` always returns a meaningful list, even on a cold hub with zero active subscriptions (DEC-030).
 
 **Args.** None.
 
-**Returns.** Array of `{uri, kind, venue, symbol, description}`.
+**Returns.** Array of `{uri, kind, venue, symbol, description}` — sourced from each venue adapter's catalog.
 
 **Example.**
 ```json
@@ -49,7 +49,7 @@ Every tool is a JSON-RPC `tools/call` against a name with strongly-typed Zod-der
 ```
 
 **Errors.**
-- `unknown symbol XXX; available symbols: BTC-USD, ETH-USD, SOL-USD` — the URI's symbol isn't configured. Pick one from the list.
+- `unknown topic <uri>; available topics: market://coinbase/book/BTC-USD, …` — the URI isn't in the catalog. Pick one from the enumerated list, or call `list_topics()`.
 
 ---
 
@@ -123,17 +123,23 @@ If `stale: true`: the upstream feed has gapped and a resync is in progress; valu
   "service": "silver8-market-data-hub",
   "mode": "monolith",
   "uptimeSeconds": 1234,
-  "topics": [
-    {"uri":"market://coinbase/book/BTC-USD", "consumerCount":3, "stale":false, "sequence":12345, "lastTimestamp":"..."}
+  "catalog": [
+    {"uri":"market://coinbase/book/BTC-USD","kind":"book","venue":"coinbase","symbol":"BTC-USD","description":"…"}
+  ],
+  "active": [
+    {"uri":"market://coinbase/book/BTC-USD","consumerCount":3,"stale":false,"sequence":12345,"lastTimestamp":"…"}
   ],
   "consumers": {"ws": 3, "mcp": 1, "totalSubscriptions": 4},
   "upstream": {
     "coinbase": {
-      "status": "connected", "connectedAt": "...", "symbols": ["BTC-USD","ETH-USD","SOL-USD"],
-      "lastMessageAt": "...", "reconnectAttempts": 0, "booksKnown": 3
+      "status": "connected", "connectedAt": "…",
+      "symbols": ["BTC-USD","ETH-USD","SOL-USD","AVAX-USD","DOGE-USD","XRP-USD","LINK-USD","MATIC-USD"],
+      "lastMessageAt": "…", "reconnectAttempts": 0, "booksKnown": 3
     }
   }
 }
 ```
 
-If `upstream.coinbase.status !== "connected"` *or* topics show `stale: true`, expect tool calls for affected symbols to return stale data or `no book state yet` errors.
+`catalog` (DEC-030 / DEC-032) is the authoritative answer to "what could a consumer subscribe to?" — populated synchronously at startup. `active` lists currently-warm topics with consumer/freshness info; in demand-driven mode (DEC-027) it starts empty on a cold hub and grows as consumers subscribe.
+
+If `upstream.coinbase.status !== "connected"` *or* an active entry shows `stale: true`, expect tool calls for affected symbols to return stale data or `no book state yet` errors.

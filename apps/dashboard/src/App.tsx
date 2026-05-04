@@ -13,8 +13,11 @@ export function App() {
   const { status, loading, error } = useStatus(1500);
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
 
+  // DEC-030 / DEC-032: catalog is the authoritative answer to "what could a
+  // consumer subscribe to?" The picker reads it directly so the chicken-and-egg
+  // demand-driven cold-start problem doesn't occur.
   const symbols = useMemo(() => {
-    return status?.upstream.coinbase?.symbols ?? [];
+    return status?.catalog?.map((entry) => entry.symbol) ?? [];
   }, [status]);
 
   const bookSub = useBookSubscription(selectedSymbol ? bookUri(selectedSymbol) : null);

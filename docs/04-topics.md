@@ -8,7 +8,9 @@ The hub exposes topics as URIs of the form `market://<venue>/<kind>/<symbol>`.
 |---|---|---|
 | `market://coinbase/book/<symbol>` | `book` | Live L2 order book for `<symbol>` on Coinbase. Top-50 levels per side. |
 
-`<symbol>` is one of the configured symbols (default: `BTC-USD`, `ETH-USD`, `SOL-USD`). See `COINBASE_SYMBOLS` in [`01-getting-started.md`](01-getting-started.md).
+`<symbol>` is one of the catalog symbols. The current Coinbase catalog (hardcoded per [DEC-031](../opensprint/ADRs/DEC-031.md)) covers: `BTC-USD`, `ETH-USD`, `SOL-USD`, `AVAX-USD`, `DOGE-USD`, `XRP-USD`, `LINK-USD`, `MATIC-USD`. Call MCP `list_topics()` or read the `catalog` field in `/status` for the authoritative current list.
+
+The catalog is the **authoritative answer** to "what could a consumer subscribe to?" — distinct from the **active** list (currently warm topics). In demand-driven mode (DEC-027) a cold hub has a populated catalog and an empty active list; books are built lazily when consumers subscribe.
 
 Future kinds — `trades`, `ticker` — slot into the same scheme without architectural change.
 

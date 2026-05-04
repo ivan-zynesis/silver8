@@ -73,7 +73,7 @@ If you call `get_top_of_book` with an unsupported symbol:
 {"result":{"isError":true,"content":[{"type":"text","text":"... unknown symbol; available: BTC-USD, ETH-USD, SOL-USD"}]}}
 ```
 
-The error message lists the valid symbols. To add a symbol, update `COINBASE_SYMBOLS` and restart the hub.
+The error message lists the valid symbols. The catalog is hardcoded in `packages/ingestion/src/coinbase/coinbase-catalog.ts` per [DEC-031](../opensprint/ADRs/DEC-031.md); to add a symbol, edit that constant and rebuild.
 
 ---
 

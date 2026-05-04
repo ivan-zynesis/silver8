@@ -3,7 +3,7 @@ import { GatewayWsModule } from '@silver8/gateway-ws';
 import { IngestionModule } from '@silver8/ingestion';
 import { McpServerModule } from '@silver8/mcp-server';
 import { ConfigModule } from '../config/config.module.js';
-import { symbolsFromEnv, type Env } from '../config/env.js';
+import type { Env } from '../config/env.js';
 import { HttpModule } from '../http/http.module.js';
 import { CoreMemoryModule } from './core-memory.module.js';
 import { ObservabilityModule } from './observability.module.js';
@@ -11,6 +11,11 @@ import { ObservabilityModule } from './observability.module.js';
 /**
  * MODE=monolith — the default deployment variant (DEC-016).
  * Wires all components in a single process, backed by in-memory seams.
+ *
+ * Catalog symbols are not injected here: per DEC-031 the production catalog is
+ * a hardcoded constant inside the ingestion package. McpServerModule and
+ * GatewayWsModule discover available symbols via the VENUE_ADAPTER_CATALOG
+ * token exported by IngestionModule.
  */
 @Module({})
 export class MonolithModule {
@@ -24,7 +29,6 @@ export class MonolithModule {
         HttpModule,
 
         IngestionModule.forRoot({
-          venues: [{ venue: 'coinbase', symbols: symbolsFromEnv(env) }],
           lifecycle: env.INGESTION_LIFECYCLE,
           socketIdleMs: env.INGESTION_SOCKET_IDLE_MS,
           coinbase: { url: env.COINBASE_WS_URL },
@@ -42,7 +46,6 @@ export class MonolithModule {
           transport: env.MCP_TRANSPORT,
           httpPath: '/mcp',
           drainDeadlineMs: env.DRAIN_DEADLINE_MS,
-          symbols: symbolsFromEnv(env),
         }),
       ],
       providers: [],
