@@ -40,12 +40,13 @@ Every option has a sensible default; see `apps/hub/src/config/env.ts` for the ca
 | `WS_PORT` | `3001` | WebSocket gateway |
 | `MCP_TRANSPORT` | `http` | `http` (network) or `stdio` (process pipes) |
 | `COINBASE_WS_URL` | `wss://advanced-trade-ws.coinbase.com` | Upstream feed |
-| `COINBASE_SYMBOLS` | `BTC-USD,ETH-USD,SOL-USD` | Subscribed symbols |
 | `GATEWAY_QUEUE_DEPTH` | `1000` | Per-consumer ring buffer size |
 | `GATEWAY_OVERFLOW_DISCONNECT_MS` | `5000` | Sustained-overflow disconnect window |
 | `DRAIN_DEADLINE_MS` | `30000` | SIGTERM rebalance grace period |
 | `LOG_LEVEL` | `info` | `fatal` \| `error` \| `warn` \| `info` \| `debug` \| `trace` |
 | `LOG_PRETTY` | `false` | Human-readable log output |
+
+The Coinbase **catalog** (the set of subscribable symbols) is hardcoded in `packages/ingestion/src/coinbase/coinbase-catalog.ts` per [DEC-031](../opensprint/ADRs/DEC-031.md). It is not env-configurable in v1; REST-discovery is the documented upgrade path. Tests inject custom symbol lists via DI.
 
 ## 3. Connect via MCP — HTTP+SSE
 

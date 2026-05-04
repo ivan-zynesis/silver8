@@ -28,6 +28,7 @@ import {
 } from './runtime-config.js';
 
 const READINESS_KEY = 'ingestion';
+const CATALOG_READINESS_KEY = 'ingestion.catalog';
 const READINESS_POLL_MS = 200;
 
 /**
@@ -58,6 +59,13 @@ export class IngestionService implements OnApplicationBootstrap, OnModuleDestroy
   onApplicationBootstrap(): void {
     this.readiness.declare(READINESS_KEY);
 
+    // Catalog readiness (DEC-033). For the v1 hardcoded source the adapter
+    // populates its catalog synchronously at construction, so this flips ready
+    // immediately. A future REST-discovery adapter would surface a true
+    // not-yet-ready window; the gate stays the same.
+    this.readiness.declare(CATALOG_READINESS_KEY);
+    this.readiness.set(CATALOG_READINESS_KEY, this.coinbase.catalogReady);
+
     if (this.runtime.lifecycle === 'eager') {
       this.bootstrapEager();
     } else {
@@ -71,6 +79,7 @@ export class IngestionService implements OnApplicationBootstrap, OnModuleDestroy
     this.demandUnsubscribe?.();
     this.demandUnsubscribe = null;
     this.readiness.set(READINESS_KEY, false);
+    this.readiness.set(CATALOG_READINESS_KEY, false);
     await this.coinbase.stop();
   }
 

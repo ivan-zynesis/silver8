@@ -13,6 +13,8 @@ import {
   ORDER_BOOK_STORE,
   READINESS_REPORTER,
   REGISTRY,
+  UnknownTopicError,
+  VENUE_ADAPTER_CATALOG,
   parseResourceUri,
   type Bus,
   type BusMessage,
@@ -22,6 +24,7 @@ import {
   type Registry,
   type ResourceURI,
   type Unsubscribe,
+  type VenueAdapterCatalog,
 } from '@silver8/core';
 import {
   activeConsumerConnections,
@@ -67,6 +70,7 @@ export class WsGatewayService
     @Inject(LOGGER) private readonly logger: Logger,
     @Inject(READINESS_REPORTER) private readonly readiness: ReadinessReporter,
     @Inject(DRAIN_REGISTRAR) private readonly drainRegistrar: DrainableRegistrar,
+    @Inject(VENUE_ADAPTER_CATALOG) private readonly catalog: VenueAdapterCatalog,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -196,6 +200,21 @@ export class WsGatewayService
         event: 'error',
         code: 'invalid_uri',
         message: (err as Error).message,
+        ...(op.id ? { id: op.id } : {}),
+      });
+      return;
+    }
+
+    // Catalog enforcement (DEC-030). The catalog is authoritative — well-formed
+    // URIs that aren't in the catalog are rejected with an enumerated helpful
+    // error rather than silently accepted.
+    if (!this.catalog.describeCatalogEntry(uri)) {
+      const available = this.catalog.listCatalog().map((t) => t.uri);
+      const err = new UnknownTopicError(uri, available);
+      this.sendDirect(entry.handle, {
+        event: 'error',
+        code: err.code,
+        message: err.message,
         ...(op.id ? { id: op.id } : {}),
       });
       return;

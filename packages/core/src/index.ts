@@ -15,3 +15,6 @@ export const BUS = Symbol.for('silver8.Bus');
 export const ORDER_BOOK_STORE = Symbol.for('silver8.OrderBookStore');
 export const REGISTRY = Symbol.for('silver8.Registry');
 export const LOGGER = Symbol.for('silver8.Logger');
+
+/** DI token for the active venue adapter's catalog (DEC-030). */
+export const VENUE_ADAPTER_CATALOG = Symbol.for('silver8.VenueAdapterCatalog');

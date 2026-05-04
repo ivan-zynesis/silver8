@@ -71,9 +71,12 @@ export function StatusPanel({ status, loading, error }: Props) {
         />
       </div>
 
-      <h3>Topics</h3>
-      {status.topics.length === 0 ? (
-        <p className="muted">No topics yet — books rebuilding from upstream snapshot.</p>
+      <h3>Active topics</h3>
+      {status.active.length === 0 ? (
+        <p className="muted">
+          No active topics — demand-driven mode awaits a consumer subscribe before
+          opening upstream channels (DEC-027). The catalog below shows what's askable.
+        </p>
       ) : (
         <table className="topics">
           <thead>
@@ -86,7 +89,7 @@ export function StatusPanel({ status, loading, error }: Props) {
             </tr>
           </thead>
           <tbody>
-            {status.topics.map((t) => (
+            {status.active.map((t) => (
               <tr key={t.uri} className={t.stale ? 'row--stale' : undefined}>
                 <td><code>{t.uri}</code></td>
                 <td>{t.consumerCount}</td>
@@ -97,6 +100,17 @@ export function StatusPanel({ status, loading, error }: Props) {
             ))}
           </tbody>
         </table>
+      )}
+
+      <h3>Catalog</h3>
+      {!status.catalog || status.catalog.length === 0 ? (
+        <p className="muted">Catalog not yet populated.</p>
+      ) : (
+        <p className="catalog">
+          {status.catalog.map((entry) => (
+            <code key={entry.uri} className="catalog__entry">{entry.symbol}</code>
+          ))}
+        </p>
       )}
     </section>
   );

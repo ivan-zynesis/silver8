@@ -114,7 +114,7 @@ pnpm typecheck    # tsc -b across the project graph
 See [`docs/01-getting-started.md`](docs/01-getting-started.md) for the full env table. Key knobs:
 
 - `MODE` — `monolith` | `ingestion` | `gateway`
-- `COINBASE_SYMBOLS` — comma-separated, default `BTC-USD,ETH-USD,SOL-USD`
+- Coinbase catalog symbols are hardcoded in `packages/ingestion/src/coinbase/coinbase-catalog.ts` per [DEC-031](opensprint/ADRs/DEC-031.md); not env-configurable in v1
 - `MCP_TRANSPORT` — `http` (default) | `stdio`
 
 ## Restart semantics

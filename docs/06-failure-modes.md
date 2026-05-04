@@ -53,14 +53,34 @@ What you'll see when things go wrong, and what to do.
 
 ## Tool-call: unknown symbol
 
-**Trigger.** You called `get_top_of_book` / `get_book_snapshot` / `describe_topic` with a symbol not in the configured list.
+**Trigger.** You called `get_top_of_book` / `get_book_snapshot` / `describe_topic` with a symbol not in the catalog.
 
 **Surface.**
 ```json
 {"isError":true,"content":[{"type":"text","text":"unknown symbol BTC-USDT; available symbols: BTC-USD, ETH-USD, SOL-USD"}]}
 ```
 
-**Your response.** Pick a symbol from the listed valid ones, or call `list_topics` to discover what's configured.
+`describe_topic` raises a parallel `unknown topic <uri>; available topics: …` error when the URI is well-formed but not in the catalog (DEC-030).
+
+**Your response.** Pick a symbol from the listed valid ones, or call `list_topics` to discover what's in the catalog.
+
+---
+
+## WS subscribe: unknown topic
+
+**Trigger.** Your WS client called `subscribe` with a URI that parses correctly but isn't in any venue adapter's catalog (DEC-030). The catalog is authoritative — well-formed-but-unknown URIs are not silently accepted.
+
+**Surface.**
+```json
+{
+  "event": "error",
+  "code": "unknown_topic",
+  "message": "unknown topic market://coinbase/book/UNKNOWN-USD; available topics: market://coinbase/book/BTC-USD, market://coinbase/book/ETH-USD, …",
+  "id": "<your-correlation-id>"
+}
+```
+
+**Your response.** Pick a URI from the enumerated alternatives, or fetch `/status` and read the `catalog` field for the full list.
 
 ---
 
@@ -79,14 +99,14 @@ What you'll see when things go wrong, and what to do.
 
 ## Hub-level: not ready
 
-**Trigger.** `/readyz` returns `503` and `{"ready": false, "components": [{"component":"ingestion","ready":false}, ...]}`.
+**Trigger.** `/readyz` returns `503` and `{"ready": false, "components": [{"component":"…","ready":false}, ...]}`.
 
 **Causes.**
-- Hub just started; upstream snapshot not yet received.
-- Upstream connection failing (firewall, bad URL).
 - Hub is draining (`draining: true`).
+- A subsystem (gateway, MCP, ingestion) hasn't reported ready yet.
+- The venue adapter's catalog isn't ready (`ingestion.catalog: false`) — uncommon for v1's hardcoded source which flips ready synchronously, but real for future REST-discovery adapters that gate readiness on first product fetch (DEC-033).
 
-**Your response.** Don't route consumer traffic to this instance. Watch `/readyz` until it flips to `200`.
+**Your response.** Don't route consumer traffic to this instance. Watch `/readyz` until it flips to `200`. The `components` array names exactly which subsystem is holding readiness.
 
 ---
 

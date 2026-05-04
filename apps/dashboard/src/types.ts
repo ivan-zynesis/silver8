@@ -1,7 +1,15 @@
 // Mirrors the hub's HTTP /status response shape (apps/hub/src/http/status.controller.ts).
 // Kept manually in sync; a future enhancement could codegen from a shared schema.
 
-export interface HubStatusTopic {
+export interface CatalogEntry {
+  uri: string;
+  kind: 'book';
+  venue: string;
+  symbol: string;
+  description: string;
+}
+
+export interface ActiveTopic {
   uri: string;
   consumerCount: number;
   stale: boolean;
@@ -13,7 +21,10 @@ export interface HubStatus {
   service: string;
   mode: string;
   uptimeSeconds: number;
-  topics: HubStatusTopic[];
+  /** Subscribable topics — DEC-030 / DEC-032. The dashboard reads this for the symbol picker. */
+  catalog: CatalogEntry[];
+  /** Currently warm topics (registry-subscribed or with stored state). */
+  active: ActiveTopic[];
   consumers: { ws: number; mcp: number; totalSubscriptions: number };
   upstream: {
     coinbase?: {

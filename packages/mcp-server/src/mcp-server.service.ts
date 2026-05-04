@@ -11,7 +11,7 @@ import {
   ORDER_BOOK_STORE,
   READINESS_REPORTER,
   REGISTRY,
-  buildResourceUri,
+  VENUE_ADAPTER_CATALOG,
   parseResourceUri,
   type Bus,
   type BusMessage,
@@ -22,6 +22,7 @@ import {
   type Registry,
   type ResourceURI,
   type Unsubscribe,
+  type VenueAdapterCatalog,
 } from '@silver8/core';
 import {
   activeConsumerConnections,
@@ -34,6 +35,7 @@ import { buildMcpStatus, type McpHubStatus } from './status-builder.js';
 import {
   DescribeTopicSchema,
   bookSnapshotSchema,
+  catalogSymbols,
   describeTopic,
   getBookSnapshot,
   getTopOfBook,
@@ -76,6 +78,7 @@ export class McpServerService
     @Inject(LOGGER) private readonly logger: Logger,
     @Inject(READINESS_REPORTER) private readonly readiness: ReadinessReporter,
     @Inject(DRAIN_REGISTRAR) private readonly drainRegistrar: DrainableRegistrar,
+    @Inject(VENUE_ADAPTER_CATALOG) private readonly catalog: VenueAdapterCatalog,
   ) {
     this.mcp = new McpServer(
       { name: 'silver8-market-data-hub', version: '0.1.0' },
@@ -93,7 +96,7 @@ export class McpServerService
     this.drainRegistrar.register(this);
     this.toolDeps = {
       store: this.store,
-      configuredSymbols: this.config.symbols,
+      catalog: this.catalog,
     };
 
     this.registerTools();
@@ -147,7 +150,7 @@ export class McpServerService
   // === Tools (DEC-015) ===
 
   private registerTools(): void {
-    const symbols = this.config.symbols;
+    const symbols = catalogSymbols(this.toolDeps);
 
     this.mcp.registerTool(
       'list_topics',
@@ -248,8 +251,8 @@ export class McpServerService
   // === Resources (DEC-013) ===
 
   private registerResources(): void {
-    for (const symbol of this.config.symbols) {
-      const uri = buildResourceUri('coinbase', 'book', symbol);
+    for (const entry of this.catalog.listCatalog()) {
+      const { uri, symbol } = entry;
       this.mcp.registerResource(
         `book-${symbol}`,
         uri,
@@ -305,9 +308,9 @@ export class McpServerService
     // automatically responds to resources/subscribe; we cooperate by emitting
     // notifications/resources/updated on each bus event for that URI.
     // We instrument by wrapping the SDK's transport sender — but the cleanest
-    // path is to subscribe to the bus eagerly for every configured topic.
-    for (const symbol of this.config.symbols) {
-      const uri = buildResourceUri('coinbase', 'book', symbol);
+    // path is to subscribe to the bus eagerly for every catalog topic.
+    for (const entry of this.catalog.listCatalog()) {
+      const { uri } = entry;
       const off = this.bus.subscribe(uri, async (msg: BusMessage) => {
         // Only emit a notification when the URI is currently subscribed.
         if (!this.subscribedUris.has(uri)) return;
@@ -344,7 +347,7 @@ export class McpServerService
   // === Status ===
 
   buildStatus(extraUpstream?: Record<string, unknown>): McpHubStatus {
-    return buildMcpStatus(this.registry, this.store, {
+    return buildMcpStatus(this.registry, this.store, this.catalog, {
       service: 'silver8-market-data-hub',
       mode: 'monolith', // best-effort; the StatusController's payload is canonical
       startedAtMs: this.startedAt,

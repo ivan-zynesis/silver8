@@ -11,6 +11,8 @@ import {
   type DrainableRegistrar,
   type ReadinessReporter,
   type ResourceURI,
+  type TopicDescriptor,
+  type VenueAdapterCatalog,
 } from '@silver8/core';
 import {
   InMemoryBus,
@@ -44,6 +46,23 @@ class FakeRegistrar implements DrainableRegistrar {
   register(d: Drainable) { this.drainables.push(d); }
 }
 
+function makeCatalog(symbols: string[]): VenueAdapterCatalog {
+  const entries: TopicDescriptor[] = symbols.map((symbol) => ({
+    uri: `market://coinbase/book/${symbol}` as ResourceURI,
+    kind: 'book',
+    venue: 'coinbase',
+    symbol,
+    description: `book for ${symbol}`,
+  }));
+  const byUri = new Map(entries.map((e) => [e.uri, e]));
+  return {
+    venue: 'coinbase',
+    listCatalog: () => entries,
+    describeCatalogEntry: (uri) => byUri.get(uri),
+    catalogReady: true,
+  };
+}
+
 interface Harness {
   bus: InMemoryBus;
   store: InMemoryOrderBookStore;
@@ -52,6 +71,7 @@ interface Harness {
   port: number;
   registrar: FakeRegistrar;
   readiness: FakeReadiness;
+  catalog: VenueAdapterCatalog;
 }
 
 let portCounter = 31337;
@@ -77,6 +97,7 @@ async function makeHarness(overrides?: Partial<GatewayWsConfig>): Promise<Harnes
   };
   const readiness = new FakeReadiness();
   const registrar = new FakeRegistrar();
+  const catalog = makeCatalog(['BTC-USD', 'ETH-USD', 'SOL-USD']);
   const service = new WsGatewayService(
     config,
     bus,
@@ -85,6 +106,7 @@ async function makeHarness(overrides?: Partial<GatewayWsConfig>): Promise<Harnes
     noopLogger,
     readiness,
     registrar,
+    catalog,
   );
   service.onApplicationBootstrap();
   // Wait until the WS server is actually listening (readiness flips at 'listening').
@@ -97,7 +119,7 @@ async function makeHarness(overrides?: Partial<GatewayWsConfig>): Promise<Harnes
     };
     check();
   });
-  return { bus, store, registry, service, port, registrar, readiness };
+  return { bus, store, registry, service, port, registrar, readiness, catalog };
 }
 
 async function teardown(h: Harness): Promise<void> {
@@ -228,6 +250,26 @@ describe('WsGatewayService — end-to-end via real WS', () => {
     const err = (await c.recv()) as { event: string; code: string };
     expect(err.event).toBe('error');
     expect(err.code).toBe('protocol_error');
+    c.close();
+  });
+
+  it('rejects subscribe to a well-formed but catalog-unknown URI with enumerated alternatives (DEC-030)', async () => {
+    const c = await connect(h.port);
+    c.send({ op: 'subscribe', resource: 'market://coinbase/book/UNKNOWN-USD', id: 'r1' });
+
+    const err = (await c.recv()) as {
+      event: string; code: string; message: string; id?: string;
+    };
+    expect(err.event).toBe('error');
+    expect(err.code).toBe('unknown_topic');
+    expect(err.id).toBe('r1');
+    expect(err.message).toMatch(/unknown topic market:\/\/coinbase\/book\/UNKNOWN-USD/);
+    expect(err.message).toMatch(/available topics:/);
+    expect(err.message).toMatch(/market:\/\/coinbase\/book\/BTC-USD/);
+
+    // The rejection must NOT register a subscription in the registry.
+    expect(h.registry.demandFor('market://coinbase/book/UNKNOWN-USD' as ResourceURI)).toBe(0);
+
     c.close();
   });
 

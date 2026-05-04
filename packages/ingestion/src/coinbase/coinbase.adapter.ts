@@ -1,6 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { WebSocket } from 'ws';
-import { LOGGER, buildResourceUri, type ResourceURI } from '@silver8/core';
+import {
+  LOGGER,
+  buildResourceUri,
+  type ResourceURI,
+  type TopicDescriptor,
+  type Venue,
+  type VenueAdapterCatalog,
+} from '@silver8/core';
 import {
   upstreamConnectionStatus,
   upstreamLatency,
@@ -8,6 +15,7 @@ import {
 } from '@silver8/observability';
 import { CoinbaseProtocolHandler, type SequenceGap } from './coinbase.protocol-handler.js';
 import type { CoinbaseSubscribeMessage } from './coinbase.types.js';
+import { buildCoinbaseCatalog } from './coinbase-catalog.js';
 
 export interface CoinbaseAdapterConfig {
   url: string;
@@ -39,7 +47,9 @@ export interface AdapterStatus {
 export const COINBASE_ADAPTER_CONFIG = Symbol.for('silver8.CoinbaseAdapterConfig');
 
 @Injectable()
-export class CoinbaseAdapter {
+export class CoinbaseAdapter implements VenueAdapterCatalog {
+  readonly venue: Venue = 'coinbase';
+
   private ws: WebSocket | null = null;
   private status: AdapterStatus['status'] = 'disconnected';
   private connectedAt: string | undefined;
@@ -54,6 +64,15 @@ export class CoinbaseAdapter {
   private readonly subscribedChannels = new Set<string>();
   private connectWaiters: Array<{ resolve: () => void; reject: (e: Error) => void }> = [];
 
+  /**
+   * Catalog (DEC-030 / DEC-031). Built synchronously from the configured
+   * symbols at construction; immutable for the adapter's lifetime in v1.
+   * A future REST-discovery adapter would refresh this asynchronously and
+   * gate `catalogReady` on first successful fetch.
+   */
+  private readonly catalog: readonly TopicDescriptor[];
+  private readonly catalogByUri: ReadonlyMap<ResourceURI, TopicDescriptor>;
+
   constructor(
     @Inject(COINBASE_ADAPTER_CONFIG) private readonly config: CoinbaseAdapterConfig,
     private readonly handler: CoinbaseProtocolHandler,
@@ -63,6 +82,23 @@ export class CoinbaseAdapter {
       onSequenceGap: (gap) => this.handleSequenceGap(gap),
       onMessage: () => this.markLastMessage(),
     });
+    this.catalog = buildCoinbaseCatalog(this.config.symbols);
+    this.catalogByUri = new Map(this.catalog.map((entry) => [entry.uri, entry]));
+  }
+
+  // === VenueAdapterCatalog ===
+
+  listCatalog(): readonly TopicDescriptor[] {
+    return this.catalog;
+  }
+
+  describeCatalogEntry(uri: ResourceURI): TopicDescriptor | undefined {
+    return this.catalogByUri.get(uri);
+  }
+
+  /** True synchronously after construction for the v1 hardcoded source (DEC-031). */
+  get catalogReady(): boolean {
+    return this.catalog.length > 0;
   }
 
   /**

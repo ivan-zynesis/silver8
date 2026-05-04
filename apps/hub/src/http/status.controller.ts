@@ -1,15 +1,29 @@
 import { Controller, Get, Inject, Optional } from '@nestjs/common';
-import { REGISTRY, ORDER_BOOK_STORE, type Registry, type OrderBookStore } from '@silver8/core';
+import {
+  ORDER_BOOK_STORE,
+  REGISTRY,
+  VENUE_ADAPTER_CATALOG,
+  type OrderBookStore,
+  type Registry,
+  type ResourceURI,
+  type TopicDescriptor,
+  type VenueAdapterCatalog,
+} from '@silver8/core';
 import { IngestionService } from '@silver8/ingestion';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 
 /**
- * /status — the engineer-facing JSON status surface (DEC-022).
- * The MCP `get_hub_status` tool (M4) returns the same payload via the same builder.
+ * /status — the engineer-facing JSON status surface (DEC-022, DEC-032).
+ * The MCP `get_hub_status` tool returns the same payload via a parity builder.
  *
  * IngestionService is injected as Optional so this controller works in modes
  * where ingestion isn't loaded (future MODE=gateway).
+ *
+ * `catalog` (DEC-030): what could be subscribed to — sourced from the venue
+ * adapter's catalog, populated synchronously at startup.
+ * `active`: what is currently warm — registry-subscribed topics plus topics
+ * with state in the store.
  */
 @Controller()
 export class StatusController {
@@ -19,12 +33,20 @@ export class StatusController {
     @Inject(REGISTRY) private readonly registry: Registry,
     @Inject(ORDER_BOOK_STORE) private readonly store: OrderBookStore,
     @Inject(ENV) private readonly env: Env,
+    @Inject(VENUE_ADAPTER_CATALOG) private readonly catalog: VenueAdapterCatalog,
     @Optional() private readonly ingestion?: IngestionService,
   ) {}
 
   @Get('/status')
   status() {
-    return buildStatus(this.registry, this.store, this.env, this.startedAt, this.ingestion);
+    return buildStatus(
+      this.registry,
+      this.store,
+      this.catalog,
+      this.env,
+      this.startedAt,
+      this.ingestion,
+    );
   }
 }
 
@@ -32,7 +54,10 @@ export interface HubStatus {
   service: string;
   mode: string;
   uptimeSeconds: number;
-  topics: Array<{
+  /** Catalog of subscribable topics — what could a consumer ask for? (DEC-030) */
+  catalog: TopicDescriptor[];
+  /** Active topics — currently warm, with consumer/freshness info. */
+  active: Array<{
     uri: string;
     consumerCount: number;
     stale: boolean;
@@ -46,24 +71,23 @@ export interface HubStatus {
 export function buildStatus(
   registry: Registry,
   store: OrderBookStore,
+  catalog: VenueAdapterCatalog,
   env: Env,
   startedAtMs: number,
   ingestion?: IngestionService,
 ): HubStatus {
   const regStatus = registry.status();
 
-  // Surface every known topic, not just topics with consumers — operators want
-  // visibility into whether upstream books are healthy regardless of demand.
   const consumersByTopic = new Map<string, number>(
     regStatus.byTopic.map((t) => [t.topic, t.consumerCount]),
   );
-  const allUris = new Set<string>([
+  const activeUris = new Set<string>([
     ...regStatus.byTopic.map((t) => t.topic),
     ...store.knownTopics(),
   ]);
 
-  const topics = Array.from(allUris).map((uri) => {
-    const tob = store.getTopOfBook(uri as Parameters<OrderBookStore['getTopOfBook']>[0]);
+  const active = Array.from(activeUris).map((uri) => {
+    const tob = store.getTopOfBook(uri as ResourceURI);
     return {
       uri,
       consumerCount: consumersByTopic.get(uri) ?? 0,
@@ -87,7 +111,8 @@ export function buildStatus(
     service: 'silver8-market-data-hub',
     mode: env.MODE,
     uptimeSeconds: Math.floor((Date.now() - startedAtMs) / 1000),
-    topics,
+    catalog: [...catalog.listCatalog()],
+    active,
     consumers: {
       ws: regStatus.consumersBySurface.ws,
       mcp: regStatus.consumersBySurface.mcp,

@@ -1,11 +1,16 @@
 import { z } from 'zod';
 import {
+  UnknownTopicError,
   buildResourceUri,
   parseResourceUri,
   type OrderBookStore,
   type ResourceURI,
+  type TopicDescriptor,
   type Venue,
+  type VenueAdapterCatalog,
 } from '@silver8/core';
+
+export type { TopicDescriptor };
 
 /**
  * Tool schemas + handlers (DEC-015).
@@ -13,6 +18,9 @@ import {
  * Schemas use Zod with description() for every field. The MCP SDK derives the
  * JSON Schema sent to the LLM client from these — descriptions are LLM-facing
  * and load-bearing for the eval (DS-LLM-USABILITY).
+ *
+ * The catalog (DEC-030) is the source of truth for "what topics exist." Tools
+ * ground in `catalog.listCatalog()` rather than a duplicate symbol list.
  */
 
 const VENUE_SCHEMA = z
@@ -22,25 +30,21 @@ const VENUE_SCHEMA = z
 
 export interface ToolDeps {
   store: OrderBookStore;
-  configuredSymbols: string[];
-}
-
-export interface TopicDescriptor {
-  uri: ResourceURI;
-  kind: 'book';
-  venue: Venue;
-  symbol: string;
-  description: string;
+  catalog: VenueAdapterCatalog;
 }
 
 export function listConfiguredTopics(deps: ToolDeps): TopicDescriptor[] {
-  return deps.configuredSymbols.map((symbol) => ({
-    uri: buildResourceUri('coinbase', 'book', symbol),
-    kind: 'book',
-    venue: 'coinbase',
-    symbol,
-    description: `Top-of-book and depth-N L2 order book for ${symbol} on Coinbase. Updates on every level change.`,
-  }));
+  return [...deps.catalog.listCatalog()];
+}
+
+/** Symbols extracted from the catalog. Used to seed Zod enum-style validators. */
+export function catalogSymbols(deps: ToolDeps): string[] {
+  return deps.catalog.listCatalog().map((entry) => entry.symbol);
+}
+
+/** Catalog URIs as plain strings — used to format helpful errors. */
+export function catalogUris(deps: ToolDeps): string[] {
+  return deps.catalog.listCatalog().map((entry) => entry.uri);
 }
 
 // --- describe_topic ---
@@ -67,12 +71,11 @@ export interface DescribeTopicResult {
 
 export function describeTopic(args: z.infer<typeof DescribeTopicSchema>, deps: ToolDeps): DescribeTopicResult {
   const parsed = parseResourceUri(args.uri);
-  if (!deps.configuredSymbols.includes(parsed.symbol)) {
-    throw new Error(
-      `unknown symbol ${parsed.symbol}; available symbols: ${deps.configuredSymbols.join(', ')}`,
-    );
+  const entry = deps.catalog.describeCatalogEntry(args.uri as ResourceURI);
+  if (!entry) {
+    throw new UnknownTopicError(args.uri, catalogUris(deps));
   }
-  const uri = args.uri as ResourceURI;
+  const uri = entry.uri;
   const tob = deps.store.getTopOfBook(uri);
   return {
     uri,
