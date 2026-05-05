@@ -30,9 +30,14 @@ Existing ADRs that remain load-bearing for this initiative:
 
 ## Milestones
 
-- [ ] **ci-e2e-bringup**: Refactor `apps/integration-tests/src/helpers.ts` to support two bringup modes — `docker` (existing `composeUp`/`composeDown`, unchanged) and `process` (new — spawns `apps/coinbase-mock/dist/main.js` and `apps/hub/dist/main.js` as child processes with port-isolated config, waits for healthchecks, tears down on `afterAll`). Switcher gated by `INTEGRATION_BRINGUP=docker|process`; default is `process` when the `CI` env var is truthy, else `docker`. Add `pnpm test:ci-e2e` script that sets the var explicitly so operators can run the CI path locally for diagnosis. Verified: same 4 lifecycle tests pass under both bringup paths.
+- [x] **ci-e2e-bringup**: `helpers.ts` gained `resolveBringup()` returning `docker | process | null` from `INTEGRATION_BRINGUP`, with `INTEGRATION_DOCKER=1` legacy alias and `CI=true` auto-default to `process`. Public dispatchers `stackUp` / `stackDown` / `bringupAvailable` replace the docker-specific names; existing docker logic moved to private `dockerComposeUp` / `dockerComposeDown`. New `processUp` / `processDown` spawn `apps/coinbase-mock/dist/main.js` and `apps/hub/dist/main.js` via `process.execPath`, capture last 80 stdio lines per child for diagnosis on failure, poll healthchecks with 30s timeout. Same ports as the docker path so test bodies are unchanged. New `pnpm test:ci-e2e` script. README documents both modes and the resolution order. Verified: `test:ci-e2e` 4/4 ✓ in 5.10s; `test:e2e` 4/4 ✓ in 59.26s; unit suite still 122/122 ✓. _Completed 2026-05-05; opsx change `2026-05-05-ci-e2e-bringup`._
 
-- [ ] **github-actions-workflow**: Add `.github/workflows/ci.yml` triggered on `pull_request` and `push` to `main`. Steps: checkout, setup-node + setup-pnpm with caching, `pnpm install --frozen-lockfile`, `pnpm -r build`, `pnpm -r typecheck`, `pnpm -r test` (unit), `pnpm test:ci-e2e`. Status check appears on PRs. Branch-protection configuration is operator-side (GitHub UI), out of scope.
+- [x] **github-actions-workflow**: `.github/workflows/ci.yml` shipped — single Ubuntu job, triggered on `pull_request` and `push` to `main`. Steps: checkout → `pnpm/action-setup@v3` (reads pnpm version from `packageManager`) → `actions/setup-node@v4` with `node-version-file: .nvmrc` and `cache: pnpm` → install --frozen-lockfile → `pnpm -r build` → `pnpm -r typecheck` → `pnpm -r test` (unit) → `pnpm --filter @silver8/integration-tests run test:ci-e2e`. Concurrency cancels PR runs on new pushes; main pushes don't cancel. `permissions: contents: read` for least-privilege. 15-minute job timeout. Branch-protection rules are operator-side, out of scope. _Completed 2026-05-05; opsx change `2026-05-05-github-actions-workflow`._
+
+## OPSX Changes
+
+- `2026-05-05-ci-e2e-bringup` (archived)
+- `2026-05-05-github-actions-workflow` (archived)
 
 ## Notes
 
