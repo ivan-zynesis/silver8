@@ -32,6 +32,7 @@ DEPTH 1
   DEC-012  Gateway WS Subscribe-Op Protocol            ← DEC-004
   DEC-022  Status Surface (HTTP + MCP parity)          ← DEC-015, DS-BRIEF
   DEC-030  Topic Catalog as VenueAdapter Capability    ← DEC-007, DS-LLM-USABILITY, DS-OPERATOR-USABILITY
+  DEC-035  Stateful HTTP Sessions for MCP              ← DEC-014, DEC-013, DS-MCP
 
 DEPTH 2
   DEC-011  Backpressure: drop-oldest + disconnect      ← DEC-006
@@ -77,8 +78,8 @@ DEPTH 6
 | DEC-010 | 1 | DS-COINBASE-WS, DEC-009 | DEC-028 | 3 |
 | DEC-011 | 2 | DEC-006 | — | 0 |
 | DEC-012 | 1 | DEC-004 | DEC-019, DEC-026 | 3 |
-| DEC-013 | 0 | DS-MCP, DS-LLM-USABILITY | DEC-019 | 2 |
-| DEC-014 | 0 | DS-MCP | — | 0 |
+| DEC-013 | 0 | DS-MCP, DS-LLM-USABILITY | DEC-019, DEC-035 | 3 |
+| DEC-014 | 0 | DS-MCP | DEC-035 | 1 |
 | DEC-015 | 0 | DS-MCP, DS-LLM-USABILITY | DEC-022, DEC-032 | 4 |
 | DEC-016 | 2 | DEC-002, DEC-004 | DEC-017 | 6 |
 | DEC-017 | 3 | DEC-016 | DEC-018, DEC-024 | 5 |
@@ -99,6 +100,7 @@ DEPTH 6
 | DEC-032 | 2 | DEC-030, DEC-022, DEC-015 | — | 0 |
 | DEC-033 | 3 | DEC-030, DEC-031 | — | 0 |
 | DEC-034 | 6 | DEC-029, DS-OPERATOR-USABILITY | — | 0 |
+| DEC-035 | 1 | DEC-014, DEC-013, DS-MCP | — | 0 |
 
 **Highest blast** (revisiting these cascades widely):
 - **DEC-004** (Three Seams) — blast **14** — touches every component plus the lifecycle and CI ADRs.
@@ -116,5 +118,8 @@ DEPTH 6
 **New-initiative entries** (`github-ci-e2e`):
 - **DEC-034** — CI-friendly e2e via native Node processes; DEC-029's Docker recipe stays as the local + production-deployment shape.
 
+**New-initiative entries** (`mcp-streaming-over-http`):
+- **DEC-035** — Stateful HTTP sessions for MCP. Re-enables `resources/subscribe` over HTTP (DEC-013 + DEC-014 commitment); supersedes the stateless per-request workaround introduced in df290b4.
+
 **Zero-blast leaves** (safe to revisit in isolation):
-DEC-003, DEC-008, DEC-011, DEC-014, DEC-020, DEC-021, DEC-023, DEC-026, DEC-032, DEC-033, DEC-034.
+DEC-003, DEC-008, DEC-011, DEC-020, DEC-021, DEC-023, DEC-026, DEC-032, DEC-033, DEC-034, DEC-035.
