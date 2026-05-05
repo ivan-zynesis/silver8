@@ -1,12 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  composeDown,
-  composeUp,
+  bringupAvailable,
   disconnectMockClients,
-  dockerAvailable,
   fetchStatus,
   injectMockGap,
   recvUntil,
+  resolveBringup,
+  stackDown,
+  stackUp,
   waitFor,
   wsConnect,
 } from './helpers.js';
@@ -14,15 +15,17 @@ import {
 const URI_BTC = 'market://coinbase/book/BTC-USD';
 const URI_ETH = 'market://coinbase/book/ETH-USD';
 
-const dockerOk = dockerAvailable();
-// In environments without docker (or where the operator opted out), every test
-// reports skipped with a clear message. The compose recipe IS the deployment
-// shape — running these locally requires `docker compose` v2.
-const describeFn = dockerOk ? describe : describe.skip;
+const bringupOk = bringupAvailable();
+const bringupMode = resolveBringup() ?? 'none';
+// In environments without a usable bringup mode, every test reports skipped
+// with a clear message. The Docker compose recipe IS the deployment shape
+// (DEC-029); the process bringup (DEC-034) runs the same tests as native Node
+// child processes for fast CI feedback.
+const describeFn = bringupOk ? describe : describe.skip;
 
-describeFn('hub-dashboard-and-lifecycle: end-to-end via docker-compose', () => {
+describeFn(`hub-dashboard-and-lifecycle: end-to-end (bringup=${bringupMode})`, () => {
   beforeAll(async () => {
-    await composeUp();
+    await stackUp();
     // /readyz waits for ingestion to be capable; healthcheck in compose already
     // gated on /healthz, so this is a quick double-check that the app is alive.
     await waitFor(async () => {
@@ -39,7 +42,7 @@ describeFn('hub-dashboard-and-lifecycle: end-to-end via docker-compose', () => {
   }, 300_000);
 
   afterAll(async () => {
-    await composeDown();
+    await stackDown();
   }, 30_000);
 
   it('test 1 — subscribe → upstream attach → snapshot delivered', async () => {
@@ -175,11 +178,13 @@ describeFn('hub-dashboard-and-lifecycle: end-to-end via docker-compose', () => {
   }, 60_000);
 });
 
-if (!dockerOk) {
+if (!bringupOk) {
   // eslint-disable-next-line no-console
   console.log(
-    '[integration-tests] suite skipped (default). To run end-to-end against ' +
-      'docker-compose, set INTEGRATION_DOCKER=1 with a working Docker daemon. ' +
-      'See apps/integration-tests/README or DEC-029 for what the suite covers.',
+    '[integration-tests] suite skipped. To run end-to-end:\n' +
+      '  - `pnpm test:e2e`     — Docker-compose bringup (DEC-029); requires Docker.\n' +
+      '  - `pnpm test:ci-e2e`  — native Node-process bringup (DEC-034); no Docker needed.\n' +
+      'In CI environments (CI=true), the process bringup is auto-selected.\n' +
+      'See apps/integration-tests/README, DEC-029, and DEC-034 for what the suite covers.',
   );
 }
