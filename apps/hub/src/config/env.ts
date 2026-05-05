@@ -12,6 +12,15 @@ const ENV_SCHEMA = z.object({
 
   /** MCP transport (DEC-014). */
   MCP_TRANSPORT: z.enum(['http', 'stdio']).default('http'),
+  /**
+   * MCP HTTP session idle TTL (DEC-035). A session with no activity for this
+   * window is reaped — its transport closes, the consumer is removed from the
+   * registry (last-consumer-out triggers DEC-027 upstream unsub), and the
+   * session entry is dropped. Default 5 min, matching DEC-027's
+   * INGESTION_SOCKET_IDLE_MS posture so the operator's mental model is
+   * "5 min of nothing → cleanup" regardless of which surface.
+   */
+  MCP_SESSION_IDLE_MS: z.coerce.number().int().nonnegative().default(300_000),
 
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   LOG_PRETTY: z
