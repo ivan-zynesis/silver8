@@ -85,7 +85,10 @@ Three architectural seams — `Bus`, `OrderBookStore`, `Registry` — are interf
 ```
 silver8/
 ├── apps/
-│   └── hub/                     composition root, HTTP shell, mode selection
+│   ├── hub/                     composition root, HTTP shell, mode selection
+│   ├── dashboard/               Vite/React operator surface, served at /dashboard (DEC-025)
+│   ├── coinbase-mock/           replay server from real-session captures (DEC-028)
+│   └── integration-tests/       docker-compose-orchestrated e2e (DEC-029, DEC-034)
 ├── packages/
 │   ├── core/                    interfaces: Bus, OrderBookStore, Registry, Drainable
 │   ├── core-memory/             in-memory impls (DEC-005, DEC-006)
@@ -106,8 +109,6 @@ silver8/
 pnpm test         # vitest run, all packages
 pnpm typecheck    # tsc -b across the project graph
 ```
-
-89 tests across 11 files cover Bus semantics, Registry lifecycle and churn fuzz, OrderBookStore correctness, Coinbase parser and gap recovery, WS gateway end-to-end (real WS pair), MCP tool validation and status parity.
 
 ## Configuration
 

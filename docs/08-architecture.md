@@ -93,8 +93,8 @@ The same binary supports three composition profiles, selected at startup by `MOD
 |---|---|---|
 | In-memory in v1 | Brief: no DB. Restart loses everything. | Documented; clients reconnect; books rebuild. |
 | L2-only topic kind | Architecture for trades/ticker is identical; v1 scope. | Trades and ticker not yet exposed. |
-| Stateless MCP HTTP transport | Simpler than session-tracking. | Long-lived `resources/subscribe` over HTTP requires the planned session mode (or use stdio/WS). |
-| Pre-subscribe all configured symbols | Demo-friendly; books warm at startup. | Books are maintained even when no consumer wants them. (Production switch: demand-driven sub via Registry.onDemandChange — primitive present, action deferred.) |
+| Stateful MCP HTTP sessions (DEC-035) | `resources/subscribe` is the protocol-native streaming primitive; honoring it requires per-session `McpServer` + transport. | Hub holds session state in-memory; sessions reap on close or after `MCP_SESSION_IDLE_MS` (default 5 min). |
+| Demand-driven upstream lifecycle (DEC-027) | Production-shape: only subscribe upstream when a consumer wants the topic; close idle sockets after a grace window. | Cold hub has populated catalog but empty active list; first subscribe pays a snapshot round-trip (~1s). |
 | Don't reimplement Kafka | Strategic. If we need partitioned/durable, adopt Kafka. | Bus is "dumb pipe"; durable replay is not provided. |
 
 ## What we did NOT build

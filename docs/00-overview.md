@@ -7,7 +7,7 @@
 The hub maintains live L2 (level-2) order book state for a set of trading pairs from Coinbase and exposes that state to two kinds of consumer:
 
 - **AI agents** via the **Model Context Protocol** (MCP). Tools cover discovery and snapshot reads; resources at `market://coinbase/book/<symbol>` support `resources/subscribe` for streaming book updates.
-- **Engineers and other software** via a **WebSocket gateway**. A small JSON op protocol lets clients `subscribe` / `unsubscribe` to topics and receive `snapshot` / `update` / `stale` / `lagged` / `rebalance` events.
+- **Engineers and other software** via a **WebSocket gateway**. A small JSON op protocol lets clients `subscribe` / `unsubscribe` to topics and receive `snapshot` / `update` / `stale` / `fresh` / `lagged` / `rebalance` events.
 
 Both surfaces sit on top of the same internal architecture — an in-memory pub/sub bus, a centralized connection registry, and a single authoritative `OrderBookStore`.
 
