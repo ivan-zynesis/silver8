@@ -111,7 +111,16 @@ describeFn('hub-dashboard-and-lifecycle: end-to-end via docker-compose', () => {
     c.send({ op: 'subscribe', resource: URI_BTC });
 
     type Msg = { event: string; resource?: string };
-    await recvUntil<Msg>(c, (m): m is Msg => typeof m === 'object' && m !== null && (m as Msg).event === 'snapshot');
+    // Wait for an upstream-driven `update` event before injecting the gap.
+    // An `update` proves the protocol handler has processed at least one
+    // upstream envelope and established a sequence baseline (lastSeq != null).
+    // The initial `snapshot` event can come from the gateway's sticky
+    // store-backed snapshot (when prior tests left BTC-USD in the store),
+    // which doesn't pass through the protocol handler — so racing the gap
+    // injection against that snapshot can let assignSequence consume the
+    // pendingGap on the very first upstream emission, and no gap is ever
+    // detected because there's no baseline to compare against.
+    await recvUntil<Msg>(c, (m): m is Msg => typeof m === 'object' && m !== null && (m as Msg).event === 'update');
 
     // Inject a sequence gap on the upstream side. The hub's protocol handler
     // (DEC-010) should detect it, mark the topic stale, then resubscribe and
