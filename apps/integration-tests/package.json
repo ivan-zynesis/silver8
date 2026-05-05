@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "vitest run --passWithNoTests",
-    "test:e2e": "INTEGRATION_DOCKER=1 vitest run",
+    "test:e2e": "INTEGRATION_BRINGUP=docker vitest run",
+    "test:ci-e2e": "INTEGRATION_BRINGUP=process vitest run",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
