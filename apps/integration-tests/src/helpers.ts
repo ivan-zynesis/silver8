@@ -1,4 +1,4 @@
-import { execSync, spawn } from 'node:child_process';
+import { execFile, execSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
 const REPO_ROOT = resolve(import.meta.dirname, '../../..');
@@ -165,12 +165,24 @@ export async function recvUntil<T>(
 }
 
 function runQuiet(args: string[]): Promise<void> {
+  // Use execFile (buffered) instead of spawn — Vitest workers' stdio handling
+  // doesn't always cooperate with long-running spawned children that 'inherit'
+  // (deadlock on full output buffers). execFile with maxBuffer ensures the
+  // child's output is fully consumed before resolution.
   return new Promise((res, rej) => {
-    const child = spawn('docker', args, { cwd: REPO_ROOT, stdio: 'inherit' });
-    child.on('close', (code) => {
-      if (code === 0) res();
-      else rej(new Error(`docker ${args.join(' ')} exited ${code}`));
-    });
+    const child = execFile(
+      'docker',
+      args,
+      { cwd: REPO_ROOT, maxBuffer: 32 * 1024 * 1024 },
+      (err, _stdout, stderr) => {
+        if (err) {
+          const trail = String(stderr ?? '').split('\n').slice(-20).join('\n');
+          rej(new Error(`docker ${args.join(' ')} failed: ${err.message}\n${trail}`));
+        } else {
+          res();
+        }
+      },
+    );
     child.on('error', rej);
   });
 }

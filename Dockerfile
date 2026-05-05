@@ -8,10 +8,16 @@ WORKDIR /app
 
 RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
 
-# Copy workspace manifests for dependency resolution.
+# Copy workspace manifests for dependency resolution. pnpm-workspace.yaml
+# matches `apps/*` and `packages/*` — every workspace's package.json must be
+# present here, otherwise that workspace's node_modules won't be populated
+# and a later `pnpm build` (turbo runs all workspaces) will fail with
+# "cannot find module ..." for the missing workspace's deps.
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY apps/hub/package.json ./apps/hub/
 COPY apps/dashboard/package.json ./apps/dashboard/
+COPY apps/coinbase-mock/package.json ./apps/coinbase-mock/
+COPY apps/integration-tests/package.json ./apps/integration-tests/
 COPY packages/core/package.json ./packages/core/
 COPY packages/core-memory/package.json ./packages/core-memory/
 COPY packages/observability/package.json ./packages/observability/
@@ -29,6 +35,7 @@ COPY tsconfig.base.json ./
 COPY turbo.json ./
 COPY packages ./packages
 COPY apps ./apps
+
 RUN pnpm build
 
 # Strip dev dependencies from node_modules for the runtime image.
@@ -39,21 +46,30 @@ RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
 FROM gcr.io/distroless/nodejs20-debian12 AS runtime
 WORKDIR /app
 
-# Copy only what's needed at runtime: built dist + production node_modules + workspace symlinks.
+# Copy only what's needed at runtime: built dist + production node_modules
+# + workspace symlinks. apps/hub/node_modules is copied separately because
+# pnpm puts each package's external deps (reflect-metadata, @nestjs/*, etc.)
+# in that package's own node_modules; it does not hoist them to the root.
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/apps/hub/dist ./apps/hub/dist
+COPY --from=build /app/apps/hub/node_modules ./apps/hub/node_modules
 COPY --from=build /app/apps/hub/package.json ./apps/hub/package.json
 COPY --from=build /app/packages/core/dist ./packages/core/dist
 COPY --from=build /app/packages/core/package.json ./packages/core/package.json
 COPY --from=build /app/packages/core-memory/dist ./packages/core-memory/dist
+COPY --from=build /app/packages/core-memory/node_modules ./packages/core-memory/node_modules
 COPY --from=build /app/packages/core-memory/package.json ./packages/core-memory/package.json
 COPY --from=build /app/packages/observability/dist ./packages/observability/dist
+COPY --from=build /app/packages/observability/node_modules ./packages/observability/node_modules
 COPY --from=build /app/packages/observability/package.json ./packages/observability/package.json
 COPY --from=build /app/packages/ingestion/dist ./packages/ingestion/dist
+COPY --from=build /app/packages/ingestion/node_modules ./packages/ingestion/node_modules
 COPY --from=build /app/packages/ingestion/package.json ./packages/ingestion/package.json
 COPY --from=build /app/packages/gateway-ws/dist ./packages/gateway-ws/dist
+COPY --from=build /app/packages/gateway-ws/node_modules ./packages/gateway-ws/node_modules
 COPY --from=build /app/packages/gateway-ws/package.json ./packages/gateway-ws/package.json
 COPY --from=build /app/packages/mcp-server/dist ./packages/mcp-server/dist
+COPY --from=build /app/packages/mcp-server/node_modules ./packages/mcp-server/node_modules
 COPY --from=build /app/packages/mcp-server/package.json ./packages/mcp-server/package.json
 # Dashboard SPA static assets — served by the hub at /dashboard/*.
 COPY --from=build /app/apps/dashboard/dist ./apps/dashboard/dist

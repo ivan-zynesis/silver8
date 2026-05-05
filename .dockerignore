@@ -10,7 +10,9 @@ node_modules
 .claude
 .DS_Store
 *.log
+**/*.log
 *.tsbuildinfo
+**/*.tsbuildinfo
 .env
 .env.*
 README.md

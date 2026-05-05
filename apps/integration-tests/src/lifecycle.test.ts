@@ -33,7 +33,10 @@ describeFn('hub-dashboard-and-lifecycle: end-to-end via docker-compose', () => {
         return null;
       }
     }, 30_000);
-  }, 120_000);
+    // 5-minute timeout accounts for a cold first run (no Docker layer cache,
+    // no warm pnpm store mount). Re-runs fit well under a minute; set
+    // SKIP_DOCKER_BUILD=1 once images exist to skip --build entirely.
+  }, 300_000);
 
   afterAll(async () => {
     await composeDown();
