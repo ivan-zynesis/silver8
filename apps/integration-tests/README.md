@@ -36,8 +36,9 @@ pnpm --filter @silver8/integration-tests run test:ci-e2e
 ```
 
 In **CI environments** (any provider that sets `CI=true`), the process bringup
-is auto-selected. The GitHub Actions workflow at `.github/workflows/ci.yml`
-runs `pnpm test:ci-e2e` directly.
+is auto-selected. The GitHub Actions workflow at
+[`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs `pnpm test:ci-e2e`
+directly as the `Integration tests (process bringup)` step.
 
 ### Mode resolution
 
