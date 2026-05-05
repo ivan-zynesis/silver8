@@ -259,8 +259,12 @@ export async function disconnectMockClients(): Promise<void> {
   if (!res.ok) throw new Error(`/control/disconnect returned ${res.status}`);
 }
 
-// Native WebSocket comes from the test runner (Node 20+).
-declare const WebSocket: typeof globalThis.WebSocket;
+// `ws` package rather than the Node global WebSocket: GitHub Actions runners
+// read .nvmrc which currently pins Node 20, and Node 20 does not have a stable
+// global WebSocket (it shipped experimental in 21, stable in 22). The `ws`
+// library implements the W3C WebSocket API so addEventListener / .data work
+// the same way the global would.
+import { WebSocket } from 'ws';
 
 export interface WsClient {
   ws: WebSocket;
@@ -276,7 +280,7 @@ export function wsConnect(url: string = `${HUB_WS}/`): Promise<WsClient> {
     const waiters: Array<{ resolve: (v: unknown) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }> = [];
     let opened = false;
 
-    ws.addEventListener('message', (e) => {
+    ws.addEventListener('message', (e: { data: unknown }) => {
       const msg = JSON.parse(String(e.data));
       const w = waiters.shift();
       if (w) { clearTimeout(w.timer); w.resolve(msg); } else { buffered.push(msg); }
