@@ -47,6 +47,7 @@ export class MonolithModule {
           httpPath: '/mcp',
           httpPort: env.HTTP_PORT,
           drainDeadlineMs: env.DRAIN_DEADLINE_MS,
+          sessionIdleMs: env.MCP_SESSION_IDLE_MS,
         }),
       ],
       providers: [],

@@ -324,6 +324,170 @@ export async function recvUntil<T>(
   throw new Error(`recvUntil exhausted after ${max} messages`);
 }
 
+// === MCP HTTP helpers (DEC-035) ==================================================
+//
+// Stateful Streamable HTTP transport: POST initialize → server returns
+// Mcp-Session-Id header. Subsequent POSTs echo that header. Server-initiated
+// notifications (e.g. resources/updated) flow over a GET-opened SSE stream.
+
+const MCP_URL = `${HUB_HTTP}/mcp`;
+
+export interface McpInitResult {
+  sessionId: string;
+}
+
+export async function mcpInitialize(): Promise<McpInitResult> {
+  const res = await fetch(MCP_URL, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'silver8-integration-test', version: '0.0.0' },
+      },
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`mcp initialize failed: ${res.status} ${await res.text()}`);
+  }
+  const sessionId = res.headers.get('mcp-session-id');
+  if (!sessionId) {
+    throw new Error('mcp initialize response missing Mcp-Session-Id header');
+  }
+  // Drain the body so the connection releases.
+  await res.text().catch(() => undefined);
+  return { sessionId };
+}
+
+export async function mcpPost(sessionId: string, payload: unknown): Promise<Response> {
+  return fetch(MCP_URL, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'mcp-session-id': sessionId,
+      accept: 'application/json, text/event-stream',
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function mcpDelete(sessionId: string): Promise<void> {
+  await fetch(MCP_URL, {
+    method: 'DELETE',
+    headers: { 'mcp-session-id': sessionId },
+  }).catch(() => undefined);
+}
+
+export interface SseMessage {
+  event: string;
+  data: string;
+  parsed?: unknown;
+}
+
+export interface SseStream {
+  next(predicate: (m: SseMessage) => boolean, timeoutMs?: number): Promise<SseMessage>;
+  close(): void;
+}
+
+export async function mcpOpenSseStream(sessionId: string): Promise<SseStream> {
+  const ctrl = new AbortController();
+  const res = await fetch(MCP_URL, {
+    method: 'GET',
+    headers: {
+      'mcp-session-id': sessionId,
+      accept: 'text/event-stream',
+    },
+    signal: ctrl.signal,
+  });
+  if (!res.ok || !res.body) {
+    throw new Error(`mcp GET (SSE) failed: ${res.status}`);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  const buffer: SseMessage[] = [];
+  const waiters: Array<{
+    resolve: (m: SseMessage) => void;
+    reject: (e: Error) => void;
+    predicate: (m: SseMessage) => boolean;
+    timer: NodeJS.Timeout;
+  }> = [];
+  let acc = '';
+
+  const dispatch = (msg: SseMessage) => {
+    for (let i = 0; i < waiters.length; i++) {
+      if (waiters[i].predicate(msg)) {
+        const w = waiters.splice(i, 1)[0];
+        clearTimeout(w.timer);
+        w.resolve(msg);
+        return;
+      }
+    }
+    buffer.push(msg);
+  };
+
+  const pump = async () => {
+    try {
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        acc += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = acc.indexOf('\n\n')) !== -1) {
+          const raw = acc.slice(0, idx);
+          acc = acc.slice(idx + 2);
+          if (raw.trim()) dispatch(parseSseEvent(raw));
+        }
+      }
+    } catch {
+      // stream closed or aborted
+    }
+  };
+  void pump();
+
+  return {
+    next(predicate, timeoutMs = 10_000) {
+      const idx = buffer.findIndex(predicate);
+      if (idx >= 0) return Promise.resolve(buffer.splice(idx, 1)[0]);
+      return new Promise<SseMessage>((resolve, reject) => {
+        const timer = setTimeout(
+          () => reject(new Error(`SSE next() timeout after ${timeoutMs}ms`)),
+          timeoutMs,
+        );
+        waiters.push({ resolve, reject, predicate, timer });
+      });
+    },
+    close() {
+      try { ctrl.abort(); } catch { /* ignore */ }
+      while (waiters.length) {
+        const w = waiters.shift()!;
+        clearTimeout(w.timer);
+        w.reject(new Error('SSE stream closed'));
+      }
+    },
+  };
+}
+
+function parseSseEvent(raw: string): SseMessage {
+  let event = 'message';
+  const dataLines: string[] = [];
+  for (const line of raw.split('\n')) {
+    if (line.startsWith('event:')) event = line.slice(6).trim();
+    else if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''));
+  }
+  const data = dataLines.join('\n');
+  let parsed: unknown;
+  try { parsed = JSON.parse(data); } catch { /* not JSON */ }
+  return { event, data, parsed };
+}
+
 function runQuiet(args: string[]): Promise<void> {
   // Use execFile (buffered) instead of spawn — Vitest workers' stdio handling
   // doesn't always cooperate with long-running spawned children that 'inherit'

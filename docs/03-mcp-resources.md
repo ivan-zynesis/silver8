@@ -64,6 +64,19 @@ Treat this as: *finish what you're doing, then reconnect*. See [`06-failure-mode
 
 > **Subscribe to be told *when* something changes; read to get *what* changed.** The notification is small (just the URI); the content is fetched on demand. This keeps the protocol cheap and the consumer in control of how often it actually pulls the latest view.
 
-## Stateless HTTP transport caveat
+## Stateful HTTP transport (DEC-035)
 
-The hub's HTTP transport runs in stateless mode (one transport per request). `resources/subscribe` works for the duration of a connection but does not survive across requests — clients that want long-lived subscriptions over HTTP should use the SDK's session support (planned, not in v1) or use the stdio transport. The WS gateway ([`07-ws-gateway.md`](07-ws-gateway.md)) is the sturdier option for non-MCP streaming.
+The HTTP transport runs in stateful mode: each MCP client gets a session, identified by the `Mcp-Session-Id` header that the server returns on `initialize`. Subscriptions live for the session, not for a single request — the same SSE stream delivers `notifications/resources/updated` for every URI the client has subscribed to.
+
+Wire flow:
+
+1. **Initialize** — `POST /mcp` with the `initialize` request (no header). The 200 response carries `Mcp-Session-Id: <uuid>`; remember it.
+2. **Initialized notification** — `POST /mcp` with `{"jsonrpc":"2.0","method":"notifications/initialized"}` and the `Mcp-Session-Id` header. Per the MCP spec.
+3. **Open the SSE stream** — `GET /mcp` with `Accept: text/event-stream` and the `Mcp-Session-Id` header. Server-initiated notifications flow on this long-lived connection.
+4. **Subscribe** — `POST /mcp` with the `resources/subscribe` request and the `Mcp-Session-Id` header. The session is now registered as an MCP consumer (see [`08-architecture.md`](08-architecture.md)) and demand-driven upstream channel attach kicks in (DEC-027).
+5. **Updates** — read `notifications/resources/updated` events from the SSE stream and call `resources/read` to fetch the latest `BookView`.
+6. **Unsubscribe / close** — either send `resources/unsubscribe`, send `DELETE /mcp` to end the session, or just disconnect. Idle sessions reap automatically after `MCP_SESSION_IDLE_MS` (default 5 min).
+
+A session that goes longer than the idle window without activity is closed by the server; the client should re-`initialize` and re-`subscribe`. There is no concurrent-session cap in monolith mode — the registry tracks them like any other consumer surface.
+
+The WS gateway ([`07-ws-gateway.md`](07-ws-gateway.md)) remains the option for non-MCP streaming; the surfaces are symmetric (DEC-026) and you can mix and match per client.
