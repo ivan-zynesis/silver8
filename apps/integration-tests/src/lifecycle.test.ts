@@ -1,12 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  composeDown,
-  composeUp,
+  bringupAvailable,
   disconnectMockClients,
-  dockerAvailable,
   fetchStatus,
   injectMockGap,
   recvUntil,
+  resolveBringup,
+  stackDown,
+  stackUp,
   waitFor,
   wsConnect,
 } from './helpers.js';
@@ -14,15 +15,17 @@ import {
 const URI_BTC = 'market://coinbase/book/BTC-USD';
 const URI_ETH = 'market://coinbase/book/ETH-USD';
 
-const dockerOk = dockerAvailable();
-// In environments without docker (or where the operator opted out), every test
-// reports skipped with a clear message. The compose recipe IS the deployment
-// shape — running these locally requires `docker compose` v2.
-const describeFn = dockerOk ? describe : describe.skip;
+const bringupOk = bringupAvailable();
+const bringupMode = resolveBringup() ?? 'none';
+// In environments without a usable bringup mode, every test reports skipped
+// with a clear message. The Docker compose recipe IS the deployment shape
+// (DEC-029); the process bringup (DEC-034) runs the same tests as native Node
+// child processes for fast CI feedback.
+const describeFn = bringupOk ? describe : describe.skip;
 
-describeFn('hub-dashboard-and-lifecycle: end-to-end via docker-compose', () => {
+describeFn(`hub-dashboard-and-lifecycle: end-to-end (bringup=${bringupMode})`, () => {
   beforeAll(async () => {
-    await composeUp();
+    await stackUp();
     // /readyz waits for ingestion to be capable; healthcheck in compose already
     // gated on /healthz, so this is a quick double-check that the app is alive.
     await waitFor(async () => {
@@ -33,10 +36,13 @@ describeFn('hub-dashboard-and-lifecycle: end-to-end via docker-compose', () => {
         return null;
       }
     }, 30_000);
-  }, 120_000);
+    // 5-minute timeout accounts for a cold first run (no Docker layer cache,
+    // no warm pnpm store mount). Re-runs fit well under a minute; set
+    // SKIP_DOCKER_BUILD=1 once images exist to skip --build entirely.
+  }, 300_000);
 
   afterAll(async () => {
-    await composeDown();
+    await stackDown();
   }, 30_000);
 
   it('test 1 — subscribe → upstream attach → snapshot delivered', async () => {
@@ -108,7 +114,16 @@ describeFn('hub-dashboard-and-lifecycle: end-to-end via docker-compose', () => {
     c.send({ op: 'subscribe', resource: URI_BTC });
 
     type Msg = { event: string; resource?: string };
-    await recvUntil<Msg>(c, (m): m is Msg => typeof m === 'object' && m !== null && (m as Msg).event === 'snapshot');
+    // Wait for an upstream-driven `update` event before injecting the gap.
+    // An `update` proves the protocol handler has processed at least one
+    // upstream envelope and established a sequence baseline (lastSeq != null).
+    // The initial `snapshot` event can come from the gateway's sticky
+    // store-backed snapshot (when prior tests left BTC-USD in the store),
+    // which doesn't pass through the protocol handler — so racing the gap
+    // injection against that snapshot can let assignSequence consume the
+    // pendingGap on the very first upstream emission, and no gap is ever
+    // detected because there's no baseline to compare against.
+    await recvUntil<Msg>(c, (m): m is Msg => typeof m === 'object' && m !== null && (m as Msg).event === 'update');
 
     // Inject a sequence gap on the upstream side. The hub's protocol handler
     // (DEC-010) should detect it, mark the topic stale, then resubscribe and
@@ -163,11 +178,13 @@ describeFn('hub-dashboard-and-lifecycle: end-to-end via docker-compose', () => {
   }, 60_000);
 });
 
-if (!dockerOk) {
+if (!bringupOk) {
   // eslint-disable-next-line no-console
   console.log(
-    '[integration-tests] suite skipped (default). To run end-to-end against ' +
-      'docker-compose, set INTEGRATION_DOCKER=1 with a working Docker daemon. ' +
-      'See apps/integration-tests/README or DEC-029 for what the suite covers.',
+    '[integration-tests] suite skipped. To run end-to-end:\n' +
+      '  - `pnpm test:e2e`     — Docker-compose bringup (DEC-029); requires Docker.\n' +
+      '  - `pnpm test:ci-e2e`  — native Node-process bringup (DEC-034); no Docker needed.\n' +
+      'In CI environments (CI=true), the process bringup is auto-selected.\n' +
+      'See apps/integration-tests/README, DEC-029, and DEC-034 for what the suite covers.',
   );
 }

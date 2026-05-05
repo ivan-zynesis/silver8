@@ -145,11 +145,28 @@ describe('MockServer end-to-end', () => {
     const res = await fetch(`http://127.0.0.1:${h.controlPort}/control/inject-gap`, { method: 'POST' });
     expect(res.ok).toBe(true);
 
-    // The next l2 envelope's sequence_num should be (first + 2), not (first + 1).
-    const next = await recvUntil(c, (m): m is { channel: string; sequence_num: number } =>
-      typeof m === 'object' && m !== null && (m as { channel?: unknown }).channel === 'l2_data',
-    );
-    expect(next.sequence_num).toBe(first.sequence_num + 2);
+    // Race-tolerant assertion: the mock emits at MOCK_RATE_HZ; between the
+    // moment we receive `first` and the inject-gap POST taking effect, the
+    // mock may have already emitted (or buffered) one or more consecutive
+    // envelopes. The pendingGap flag is consumed on the very next emission
+    // *after* it's set. Rather than asserting the +2 skip lands precisely
+    // on the next envelope received, scan the post-inject stream for ANY
+    // consecutive pair with a +2 jump while the rest stay strictly +1.
+    let prev = first.sequence_num;
+    let gapFound = false;
+    for (let i = 0; i < 30; i++) {
+      const env = await recvUntil(c, (m): m is { channel: string; sequence_num: number } =>
+        typeof m === 'object' && m !== null && (m as { channel?: unknown }).channel === 'l2_data',
+      );
+      const diff = env.sequence_num - prev;
+      if (diff === 2) {
+        gapFound = true;
+        break;
+      }
+      expect(diff).toBe(1);
+      prev = env.sequence_num;
+    }
+    expect(gapFound).toBe(true);
 
     c.close();
   });

@@ -62,25 +62,31 @@ export class CoinbaseProtocolHandler {
 
     // Sequence-gap check (only when we have a baseline). Subscriptions / heartbeats
     // share the sequence space with l2_data, so we track all envelopes uniformly.
-    if (this.lastSeq !== null && result.sequenceNum > 0) {
-      const expected = this.lastSeq + 1;
-      if (result.sequenceNum !== expected) {
-        const gap: SequenceGap = {
-          expectedSeq: expected,
-          receivedSeq: result.sequenceNum,
-          affectedTopics: Array.from(this.subscribedTopics),
-        };
-        this.logger.warn({ gap }, 'sequence gap detected; resync requested');
-        // Mark stale before notifying adapter so consumers see stale before resync starts.
-        await this.maintainer.markAllStale(gap.affectedTopics, 'sequence_gap');
-        await this.events?.onSequenceGap(gap);
-        // Sequence baseline reset will be handled by the adapter via resetSequence()
-        // once it has performed the resubscribe.
-        this.lastSeq = result.sequenceNum;
-        return;
+    //
+    // We treat sequence_num === 0 as "no sequence" — Coinbase emits 0 for the
+    // initial `subscriptions` ack envelope after a (re)subscribe. Both the gap
+    // check AND the baseline update must skip seq=0; otherwise the baseline
+    // gets reset to 0 right after a resync, the next real data envelope
+    // (seq=N >> 1) is mis-detected as a gap, and resync loops forever.
+    if (result.sequenceNum > 0) {
+      if (this.lastSeq !== null) {
+        const expected = this.lastSeq + 1;
+        if (result.sequenceNum !== expected) {
+          const gap: SequenceGap = {
+            expectedSeq: expected,
+            receivedSeq: result.sequenceNum,
+            affectedTopics: Array.from(this.subscribedTopics),
+          };
+          this.logger.warn({ gap }, 'sequence gap detected; resync requested');
+          // Mark stale before notifying adapter so consumers see stale before resync starts.
+          await this.maintainer.markAllStale(gap.affectedTopics, 'sequence_gap');
+          await this.events?.onSequenceGap(gap);
+          // Sequence baseline reset will be handled by the adapter via resetSequence()
+          // once it has performed the resubscribe.
+          this.lastSeq = result.sequenceNum;
+          return;
+        }
       }
-    }
-    if (result.sequenceNum >= 0) {
       this.lastSeq = result.sequenceNum;
     }
 

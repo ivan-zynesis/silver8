@@ -1,11 +1,18 @@
 # Integration Tests
 
 End-to-end test suite for the silver8 hub. Orchestrates the hub + the Coinbase
-mock as separate services via `docker-compose.integration.yml` (at the repo
-root) and asserts the complete data-plane lifecycle.
+mock as separate services and asserts the complete data-plane lifecycle.
 
-This is the M4 deliverable for the `hub-dashboard-and-lifecycle` initiative
-and the literal embodiment of DEC-029.
+The suite supports **two bringup modes** (DEC-029, DEC-034):
+
+| Mode | When | What it spins up |
+|---|---|---|
+| `docker`  | local dev, deployment-shape verification | `docker-compose.integration.yml` — same recipe as production |
+| `process` | CI, fast iteration | Native Node child processes spawned from each app's `dist/main.js` |
+
+The same vitest test bodies run under both modes. Tests assert against
+`localhost:3000`, `localhost:3001`, and `localhost:8766` regardless of how
+those listeners came up.
 
 ## What it covers
 
@@ -16,42 +23,56 @@ and the literal embodiment of DEC-029.
 
 ## Running
 
-The suite is **opt-in**. Default `pnpm test` runs everything else and marks
+The suite is **opt-in**. Default `pnpm test` runs the unit suite and marks
 the integration tests as skipped (with a helpful message). To run:
 
 ```bash
-# Requires Docker Desktop / `docker compose` v2 with a working daemon.
-INTEGRATION_DOCKER=1 pnpm --filter @silver8/integration-tests test:e2e
+# Docker bringup — production-shape, requires Docker Desktop + compose v2.
+pnpm --filter @silver8/integration-tests run test:e2e
 
-# Or, after a first build, skip rebuilds for faster iteration:
-INTEGRATION_DOCKER=1 SKIP_DOCKER_BUILD=1 pnpm --filter @silver8/integration-tests test:e2e
+# Process bringup — native Node child processes, no Docker needed. ~5s.
+pnpm -r build  # required: process bringup spawns dist/main.js artifacts
+pnpm --filter @silver8/integration-tests run test:ci-e2e
 ```
 
-Behind the scenes the suite runs:
+In **CI environments** (any provider that sets `CI=true`), the process bringup
+is auto-selected. The GitHub Actions workflow at
+[`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs `pnpm test:ci-e2e`
+directly as the `Integration tests (process bringup)` step.
 
+### Mode resolution
+
+The bringup mode is resolved at suite start, in this order:
+
+1. `INTEGRATION_BRINGUP=docker|process` — explicit override.
+2. `INTEGRATION_DOCKER=1` — legacy alias for `docker`.
+3. `CI` env truthy → defaults to `process`.
+4. Otherwise → suite skipped.
+
+### Speedups (Docker mode)
+
+After a first build, skip rebuilds for fast iteration:
+
+```bash
+INTEGRATION_BRINGUP=docker SKIP_DOCKER_BUILD=1 pnpm --filter @silver8/integration-tests run test:e2e
 ```
-docker compose -f docker-compose.integration.yml up -d --wait [--build]
-# ...vitest assertions...
-docker compose -f docker-compose.integration.yml down -v --timeout 5
-```
 
-The compose file mounts:
+## Why two modes
 
-- `coinbase-mock` on `:8765` (WS) and `:8766` (control plane).
-- `hub` on `:3000` (HTTP) and `:3001` (WS gateway), pointed at
-  `ws://coinbase-mock:8765` and configured `INGESTION_LIFECYCLE=demand_driven`.
+**Docker** is canonical: per DEC-029, the same `docker-compose.integration.yml`
+IS the deployment shape — production replaces `coinbase-mock` with the real
+venue and replaces `docker compose` with the production orchestrator (Fly
+Machines, Cloud Run, k8s). Same image, same env, same service topology.
 
-## Why this is the deployment recipe
-
-Per DEC-029, the same compose IS the deployment shape — production replaces
-the `coinbase-mock` service with the real venue (configured via
-`COINBASE_WS_URL`) and replaces `docker compose` with the production
-orchestrator (Fly Machines, Cloud Run, k8s). Same image, same env, same
-service topology. The suite proves the recipe works.
+**Process** is fast: per DEC-034, GitHub Actions runners pay 1–3 minutes per
+PR for Docker bringup. Native Node child processes spawn the same artifacts
+in ~5s. This catches everything except Dockerfile / runtime-image-layout
+regressions, which are caught locally on every Docker run and in any PR
+that touches the Dockerfile.
 
 ## Why opt-in by default
 
-Integration tests need Docker. CI sandboxes, freshly-cloned machines, and
-quick local edits often don't have it ready. Defaulting to skip keeps
-`pnpm test` fast and non-flaky; operators explicitly opt in when they want
-the e2e assertions.
+Integration tests need a bringup mode. Local `pnpm test` runs unit tests
+fast and stays non-flaky in environments without Docker / without dist
+artifacts; operators explicitly opt in (or the CI env auto-selects) when
+they want the e2e assertions.

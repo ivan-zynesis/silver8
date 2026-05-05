@@ -42,6 +42,9 @@ WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/apps/coinbase-mock/dist ./apps/coinbase-mock/dist
 COPY --from=build /app/apps/coinbase-mock/fixtures ./apps/coinbase-mock/fixtures
+# pnpm puts external deps (ws, zod) in the package's own node_modules — needed
+# at runtime since pnpm doesn't hoist them to the workspace root by default.
+COPY --from=build /app/apps/coinbase-mock/node_modules ./apps/coinbase-mock/node_modules
 COPY --from=build /app/apps/coinbase-mock/package.json ./apps/coinbase-mock/package.json
 COPY --from=build /app/package.json ./package.json
 

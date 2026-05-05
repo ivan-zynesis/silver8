@@ -42,7 +42,6 @@ services:
       INGESTION_LIFECYCLE: demand_driven
       INGESTION_SOCKET_IDLE_MS: "2000"
       COINBASE_WS_URL: "ws://coinbase-mock:8765"
-      COINBASE_SYMBOLS: "BTC-USD,ETH-USD"
       DRAIN_DEADLINE_MS: "5000"
     ports:
       - "3000:3000"

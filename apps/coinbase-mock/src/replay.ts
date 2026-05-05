@@ -27,7 +27,20 @@ export class ConnectionReplay {
       this.heartbeatsSubscribed = true;
       return;
     }
-    for (const p of productIds) this.subs.add(`${channel}:${p}`);
+    // Subscribing to a level2 product the connection didn't previously
+    // have requires its snapshot — real Coinbase always re-emits a snapshot
+    // on subscribe. Mid-stream new subs (test 4 adds ETH-USD after BTC-USD)
+    // and resyncs (test 3 unsubscribe + subscribe after gap detection) both
+    // need this. Rewind the cursor to 0 when at least one product is newly
+    // added; the monotonic sequence counter is intentionally NOT reset, so
+    // the consumer sees a continuous stream.
+    let addedAny = false;
+    for (const p of productIds) {
+      const key = `${channel}:${p}`;
+      if (!this.subs.has(key)) addedAny = true;
+      this.subs.add(key);
+    }
+    if (addedAny) this.cursor = 0;
   }
 
   unsubscribe(channel: Channel, productIds: string[]): void {
