@@ -110,6 +110,24 @@ What you'll see when things go wrong, and what to do.
 
 ---
 
+## MCP HTTP session reaped
+
+**Trigger.** An HTTP MCP session has had no activity (no requests, no SSE traffic) for `MCP_SESSION_IDLE_MS` (default 5 min), or the hub is shutting down.
+
+**Surface.** The SSE stream closes. Subsequent requests with the stale `Mcp-Session-Id` get:
+
+```json
+{"jsonrpc":"2.0","error":{"code":-32001,"message":"Session not found; re-initialize."},"id":null}
+```
+
+(HTTP `404`.)
+
+**Hub response.** The session's bus subscriptions and registry consumer entry are removed, which feeds back into demand-driven upstream lifecycle (DEC-027) — if no consumers remain on a topic, the upstream channel unsubscribes.
+
+**Your response.** Re-`initialize`, capture the new session id, re-`subscribe` to the URIs you care about. Treat session loss the same way you treat a WS reconnect.
+
+---
+
 ## On restart: everything in-memory is lost
 
 The hub is in-memory only (`OrderBookStore`, `Registry`, all WS sockets). On restart:

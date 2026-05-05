@@ -3,7 +3,8 @@ import { MCP_SERVER_CONFIG, type McpServerConfig } from './config.js';
 import { McpServerService } from './mcp-server.service.js';
 
 export type { McpServerConfig, McpTransport } from './config.js';
-export { McpServerService } from './mcp-server.service.js';
+export { McpServerService, type SessionRegistry } from './mcp-server.service.js';
+export { McpConsumerHandle } from './mcp-consumer-handle.js';
 export { buildMcpStatus, type McpHubStatus } from './status-builder.js';
 
 @Module({})

@@ -4,6 +4,10 @@ import {
   disconnectMockClients,
   fetchStatus,
   injectMockGap,
+  mcpDelete,
+  mcpInitialize,
+  mcpOpenSseStream,
+  mcpPost,
   recvUntil,
   resolveBringup,
   stackDown,
@@ -175,6 +179,71 @@ describeFn(`hub-dashboard-and-lifecycle: end-to-end (bringup=${bringupMode})`, (
     expect(after.upstream.coinbase!.subscribedChannels).toContain('ETH-USD');
 
     c.close();
+  }, 60_000);
+
+  it('test 5 — MCP HTTP: initialize → subscribe → notification arrives', async () => {
+    // DEC-035: stateful Streamable HTTP transport. Initialize gets us a
+    // session id, GET opens the server-initiated SSE stream, then a
+    // resources/subscribe POST registers an MCP consumer. Upstream book
+    // updates should produce notifications/resources/updated on the SSE
+    // stream — symmetric to the WS gateway's snapshot/update events.
+    const { sessionId } = await mcpInitialize();
+
+    // Per MCP spec the client sends an initialized notification after
+    // initialize before any further requests.
+    const initd = await mcpPost(sessionId, {
+      jsonrpc: '2.0',
+      method: 'notifications/initialized',
+    });
+    initd.body?.cancel().catch(() => undefined);
+
+    // /status should reflect the new MCP consumer (registry-tracked).
+    await waitFor(async () => {
+      const s = await fetchStatus();
+      return s.consumers.mcp >= 1 ? s : null;
+    }, 5_000);
+
+    const sse = await mcpOpenSseStream(sessionId);
+    try {
+      const subRes = await mcpPost(sessionId, {
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'resources/subscribe',
+        params: { uri: URI_BTC },
+      });
+      expect(subRes.status).toBe(200);
+      // Drain — the SDK may answer via SSE on the POST response stream OR
+      // via a plain JSON body; we don't care about the result, only that
+      // the subscription registered. Cancel to release the connection.
+      subRes.body?.cancel().catch(() => undefined);
+
+      // Subscription must reflect on /status: BTC-USD now has at least one
+      // consumer (the MCP session), and upstream channel attaches.
+      await waitFor(async () => {
+        const s = await fetchStatus();
+        return s.upstream.coinbase!.subscribedChannels.includes('BTC-USD') ? s : null;
+      }, 10_000);
+
+      // Wait for a resources/updated notification keyed to BTC-USD.
+      const note = await sse.next(
+        (m) => {
+          const p = m.parsed as
+            | { method?: string; params?: { uri?: string } }
+            | undefined;
+          return (
+            !!p &&
+            p.method === 'notifications/resources/updated' &&
+            p.params?.uri === URI_BTC
+          );
+        },
+        20_000,
+      );
+      const parsed = note.parsed as { params: { uri: string } };
+      expect(parsed.params.uri).toBe(URI_BTC);
+    } finally {
+      sse.close();
+      await mcpDelete(sessionId);
+    }
   }, 60_000);
 });
 

@@ -1,7 +1,8 @@
 ---
 id: mcp-streaming-over-http
-status: active
+status: completed
 created: 2026-05-05
+completed: 2026-05-05
 parent: market-data-hub
 ---
 
@@ -35,7 +36,7 @@ Existing ADRs that remain load-bearing:
 
 ## Milestones
 
-- [ ] **mcp-stateful-http-streaming**: Replace the stateless per-request HTTP MCP path in `apps/hub/src/http/mcp.controller.ts` with a stateful session map. Add `createSessionServer()` factory on `McpServerService` that builds a per-session `McpServer` with `resources: { subscribe: true }` and wires bus subscriptions for `notifications/resources/updated`. Session lifecycle: created on `initialize` without an `Mcp-Session-Id` header; reused on every subsequent request matching the header; reaped on transport close OR after `MCP_SESSION_IDLE_MS` (default 300_000) of inactivity. SIGTERM drain (DEC-019) iterates sessions, broadcasts `notifications/silver8/rebalance`, force-closes after deadline. `/status.consumers.mcp` reflects live session count; per-topic `consumerCount` aggregates correctly across MCP sessions and WS gateway consumers (DS-OPERATOR-USABILITY — dashboard already exposes the column). Stateless `createPerRequestServer()` and the matching controller branch are deleted. New integration test (test 5 in `apps/integration-tests/src/lifecycle.test.ts`) — HTTP MCP client subscribes to `market://coinbase/book/BTC-USD`, hub publishes a book update, client receives `notifications/resources/updated`. Runs under both bringup modes (DEC-029 docker, DEC-034 process). Smoke verified locally with `mcp-remote → Claude Desktop` end-to-end.
+- [x] **mcp-stateful-http-streaming** *(archived: openspec/changes/archive/2026-05-05-mcp-stateful-http-streaming)*: Replace the stateless per-request HTTP MCP path in `apps/hub/src/http/mcp.controller.ts` with a stateful session map. Add `createSessionServer()` factory on `McpServerService` that builds a per-session `McpServer` with `resources: { subscribe: true }` and wires bus subscriptions for `notifications/resources/updated`. Session lifecycle: created on `initialize` without an `Mcp-Session-Id` header; reused on every subsequent request matching the header; reaped on transport close OR after `MCP_SESSION_IDLE_MS` (default 300_000) of inactivity. SIGTERM drain (DEC-019) iterates sessions, broadcasts `notifications/silver8/rebalance`, force-closes after deadline. `/status.consumers.mcp` reflects live session count; per-topic `consumerCount` aggregates correctly across MCP sessions and WS gateway consumers (DS-OPERATOR-USABILITY — dashboard already exposes the column). Stateless `createPerRequestServer()` and the matching controller branch are deleted. New integration test (test 5 in `apps/integration-tests/src/lifecycle.test.ts`) — HTTP MCP client subscribes to `market://coinbase/book/BTC-USD`, hub publishes a book update, client receives `notifications/resources/updated`. Runs under both bringup modes (DEC-029 docker, DEC-034 process). Smoke verified locally with `mcp-remote → Claude Desktop` end-to-end.
 
 ## Notes
 

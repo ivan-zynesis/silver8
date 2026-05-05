@@ -20,6 +20,7 @@ those listeners came up.
 - **Disconnect → channel unsub → idle → socket close** (DEC-027 socket-level grace).
 - **Sequence gap → topic stale → automatic resync → fresh** (DEC-010 + DEC-028 fault injection).
 - **Upstream disconnect → automatic reconnect → service resumes** (DEC-007 reconnect + DEC-028).
+- **MCP HTTP: initialize → subscribe → notification arrives** (DEC-035 stateful streamable HTTP — exercises session id, GET-opened SSE stream, and `notifications/resources/updated` delivery).
 
 ## Running
 

@@ -13,6 +13,11 @@ export interface McpServerConfig {
   httpPort: number;
   /** Drain grace period for SIGTERM rebalance hint. */
   drainDeadlineMs: number;
+  /**
+   * Idle TTL for a stateful HTTP MCP session (DEC-035). Reaped after this
+   * window of no activity. Default 300_000 (5 min).
+   */
+  sessionIdleMs: number;
 }
 
 export const MCP_SERVER_CONFIG = Symbol.for('silver8.McpServerConfig');

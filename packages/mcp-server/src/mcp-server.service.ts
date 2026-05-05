@@ -11,8 +11,8 @@ import {
   ORDER_BOOK_STORE,
   READINESS_REPORTER,
   REGISTRY,
+  UnknownTopicError,
   VENUE_ADAPTER_CATALOG,
-  parseResourceUri,
   type Bus,
   type BusMessage,
   type Drainable,
@@ -24,14 +24,16 @@ import {
   type Unsubscribe,
   type VenueAdapterCatalog,
 } from '@silver8/core';
-import {
-  activeConsumerConnections,
-  type Logger,
-} from '@silver8/observability';
+import { type Logger } from '@silver8/observability';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import {
+  SubscribeRequestSchema,
+  UnsubscribeRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { MCP_SERVER_CONFIG, type McpServerConfig } from './config.js';
 import { buildMcpStatus, type McpHubStatus } from './status-builder.js';
+import type { McpConsumerHandle } from './mcp-consumer-handle.js';
 import {
   DescribeTopicSchema,
   bookSnapshotSchema,
@@ -47,16 +49,34 @@ import {
 const READINESS_KEY = 'mcp-server';
 
 /**
- * MCP server wiring.
+ * Carries per-session bus subscription state. Stored on the McpServer instance
+ * so the controller can clean up on session drop without keeping a parallel
+ * map keyed by server reference.
+ */
+type SessionServer = McpServer & {
+  __busOff?: Map<ResourceURI, Unsubscribe>;
+};
+
+/**
+ * Hook a controller can pass to drain so it can iterate live sessions.
+ */
+export interface SessionRegistry {
+  count(): number;
+  forEach(cb: (handle: McpConsumerHandle) => void): void;
+  closeAll(reason: string): void;
+}
+
+/**
+ * MCP server wiring (DEC-013, DEC-014, DEC-035).
  *
- * - Registers tools (DEC-015) and a per-symbol book resource (DEC-013).
- * - The McpServer instance is created at bootstrap. The tools/resources are
- *   bound once.
- * - Transports are bound separately (stdio is started here; HTTP is bound by
- *   external code mounting routes on Fastify and calling `attachHttpTransport`).
- * - Tracks resource subscriptions to emit `notifications/resources/updated`
- *   on bus events.
- * - Implements Drainable for SIGTERM rebalance hint.
+ * Two transport paths:
+ *  - **stdio**: the singleton `this.mcp` is the long-lived server, connected
+ *    once at bootstrap. Tools + resources are registered on it. Resource
+ *    subscription handlers are wired here too — one stdio client → one
+ *    process lifetime → no session map needed.
+ *  - **HTTP** (DEC-035): the singleton is unused. Each session gets its own
+ *    `McpServer` via `createSessionServer(handle)`. The controller owns the
+ *    session map; this service exposes the factory and the drain hook.
  */
 @Injectable()
 export class McpServerService
@@ -66,12 +86,16 @@ export class McpServerService
 
   readonly mcp: McpServer;
   private readonly startedAt = Date.now();
-  private readonly subscribedUris = new Set<ResourceURI>();
-  private readonly busSubs = new Map<ResourceURI, Unsubscribe>();
   private toolDeps!: ToolDeps;
 
+  /**
+   * Set by the McpController during its bootstrap so drain can iterate
+   * live HTTP sessions. Null when transport=stdio.
+   */
+  private sessionRegistry: SessionRegistry | null = null;
+
   constructor(
-    @Inject(MCP_SERVER_CONFIG) private readonly config: McpServerConfig,
+    @Inject(MCP_SERVER_CONFIG) readonly config: McpServerConfig,
     @Inject(BUS) private readonly bus: Bus,
     @Inject(REGISTRY) private readonly registry: Registry,
     @Inject(ORDER_BOOK_STORE) private readonly store: OrderBookStore,
@@ -99,19 +123,11 @@ export class McpServerService
       catalog: this.catalog,
     };
 
-    // For stdio transport: register tools/resources on the singleton McpServer
-    // and wire bus → resources/subscribe streaming. The singleton is
-    // connect()'d once to the stdio transport and lives for the process
-    // lifetime (one client, persistent connection).
-    //
-    // For HTTP transport: the singleton is unused. Each HTTP request gets its
-    // own fresh McpServer via createPerRequestServer() because the SDK only
-    // allows one transport per server, and stateless HTTP creates a new
-    // transport per request.
     if (this.config.transport === 'stdio') {
+      // Singleton path — one client, persistent connection.
       this.registerToolsOn(this.mcp);
       this.registerResourcesOn(this.mcp);
-      this.wireResourceSubscriptions();
+      this.wireStdioSubscriptions(this.mcp);
       await this.connectStdio();
     }
 
@@ -120,35 +136,83 @@ export class McpServerService
   }
 
   /**
-   * Build a fresh McpServer with all tools and resources registered.
-   * Used by the HTTP controller for stateless per-request serving (DEC-014;
-   * the SDK's "one transport per server" rule means we can't share the
-   * singleton across HTTP requests). Resource-subscribe streaming via the
-   * bus is intentionally NOT wired here — that requires a long-lived
-   * transport and is only meaningful for stdio. HTTP clients that want
-   * streaming should connect via the stdio bridge (mcp-remote) or use the
-   * native WS gateway.
+   * Build a fresh McpServer for an HTTP session (DEC-035). Registers tools +
+   * resources via the existing helpers, then wires `resources/subscribe` and
+   * `resources/unsubscribe` request handlers to go through the Registry +
+   * Bus — exactly the path the WS gateway uses for its consumers (DEC-026
+   * symmetry). Per-URI `Unsubscribe` callbacks are attached to the server
+   * instance for cleanup at session-drop time.
    */
-  createPerRequestServer(): McpServer {
+  createSessionServer(handle: McpConsumerHandle): SessionServer {
     const server = new McpServer(
       { name: 'silver8-market-data-hub', version: '0.1.0' },
       {
         capabilities: {
           tools: {},
-          resources: { subscribe: false, listChanged: false },
+          resources: { subscribe: true, listChanged: false },
         },
       },
-    );
+    ) as SessionServer;
+
     this.registerToolsOn(server);
     this.registerResourcesOn(server);
+
+    const busOff = new Map<ResourceURI, Unsubscribe>();
+    server.__busOff = busOff;
+
+    server.server.setRequestHandler(SubscribeRequestSchema, async (req) => {
+      const uri = req.params.uri as ResourceURI;
+      if (!this.catalog.describeCatalogEntry(uri)) {
+        throw new UnknownTopicError(
+          uri,
+          this.catalog.listCatalog().map((t) => t.uri),
+        );
+      }
+      if (busOff.has(uri)) {
+        // Idempotent — the SDK may dedup itself, but guard explicitly.
+        return {};
+      }
+      this.registry.subscribe(handle.id, uri);
+      const off = this.bus.subscribe(uri, (msg: BusMessage) => {
+        handle.deliver(msg);
+      });
+      busOff.set(uri, off);
+      return {};
+    });
+
+    server.server.setRequestHandler(UnsubscribeRequestSchema, async (req) => {
+      const uri = req.params.uri as ResourceURI;
+      const off = busOff.get(uri);
+      if (off) {
+        off();
+        busOff.delete(uri);
+        this.registry.unsubscribe(handle.id, uri);
+      }
+      return {};
+    });
+
     return server;
+  }
+
+  /**
+   * Tear down per-session bus subscriptions. Called by the controller when a
+   * session is dropped (transport close, idle reaper, or drain).
+   */
+  cleanupSessionServer(server: SessionServer): void {
+    const busOff = server.__busOff;
+    if (busOff) {
+      for (const off of busOff.values()) off();
+      busOff.clear();
+    }
+  }
+
+  /** Controller registers itself here so drain can walk sessions. */
+  setSessionRegistry(registry: SessionRegistry): void {
+    this.sessionRegistry = registry;
   }
 
   async onModuleDestroy(): Promise<void> {
     this.readiness.set(READINESS_KEY, false);
-    for (const off of this.busSubs.values()) off();
-    this.busSubs.clear();
-    this.subscribedUris.clear();
     try {
       await this.mcp.close();
     } catch {
@@ -160,24 +224,41 @@ export class McpServerService
 
   async drain(deadlineMs: number): Promise<void> {
     this.readiness.set(READINESS_KEY, false);
-    try {
-      // Send a custom notification through the MCP server's underlying transport(s).
-      // Clients can subscribe to this method id to receive rebalance hints (DEC-019).
-      // In stateless HTTP transport mode there's typically no active transport at
-      // drain time (each request opens and closes its own); the SDK throws "Not
-      // connected" which we silently swallow.
-      await this.mcp.server.notification({
-        method: 'notifications/silver8/rebalance',
-        params: { reason: 'shutdown', deadlineMs },
-      });
-    } catch (err) {
-      const msg = (err as Error).message ?? '';
-      if (!msg.includes('Not connected')) {
-        this.logger.warn({ err }, 'failed to send mcp rebalance notification');
+
+    // stdio: one persistent transport — emit rebalance over the singleton.
+    if (this.config.transport === 'stdio') {
+      try {
+        await this.mcp.server.notification({
+          method: 'notifications/silver8/rebalance',
+          params: { reason: 'shutdown', deadlineMs },
+        });
+      } catch (err) {
+        const m = (err as Error).message ?? '';
+        if (!m.includes('Not connected')) {
+          this.logger.warn({ err }, 'failed to send mcp rebalance notification (stdio)');
+        }
       }
+      await new Promise((r) => setTimeout(r, Math.min(500, deadlineMs)));
+      return;
     }
-    // Give clients a brief window to drain on their own, then close.
-    await new Promise((r) => setTimeout(r, Math.min(500, deadlineMs)));
+
+    // http: iterate sessions, fire rebalance, wait, force-close stragglers.
+    const reg = this.sessionRegistry;
+    if (!reg) {
+      await new Promise((r) => setTimeout(r, Math.min(200, deadlineMs)));
+      return;
+    }
+    reg.forEach((handle) => {
+      handle.sendEvent({ type: 'rebalance', reason: 'shutdown', deadlineMs });
+    });
+    const start = Date.now();
+    while (reg.count() > 0 && Date.now() - start < deadlineMs) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    if (reg.count() > 0) {
+      this.logger.warn({ remaining: reg.count() }, 'mcp drain deadline reached; force-closing');
+      reg.closeAll('drain_timeout');
+    }
   }
 
   // === Tools (DEC-015) ===
@@ -322,58 +403,30 @@ export class McpServerService
   }
 
   /**
-   * Wire MCP `resources/subscribe` to the bus. The MCP SDK exposes subscribe
-   * notifications via callbacks on McpServer.server; we hook into the underlying
-   * Server's notification channel directly because the high-level API doesn't
-   * expose a subscribe handler.
+   * stdio path: wire bus events for ALL catalog URIs as
+   * `notifications/resources/updated` on the singleton transport. The SDK's
+   * built-in `resources/subscribe` handler tracks subscribed URIs internally;
+   * we simply emit notifications on every bus event and the SDK delivers
+   * them to the subscribed client.
+   *
+   * This is fine for stdio because there's exactly one persistent client.
+   * For HTTP, the per-session `createSessionServer` wires bus subscriptions
+   * lazily (only on `resources/subscribe`) and per-session, which is more
+   * efficient and gives clean per-session cleanup.
    */
-  private wireResourceSubscriptions(): void {
-    // Hook into subscribe notifications. The SDK's high-level McpServer doesn't
-    // surface these directly, so we handle them via the underlying Server.
-    const underlying = this.mcp.server;
-    // Listen for client subscribe messages by overriding the subscribe handler.
-    // The high-level API automatically responds; we add a side-effect that
-    // tracks the URI and wires it to the bus.
-    underlying.setNotificationHandler =
-      underlying.setNotificationHandler ?? (() => {});
-
-    // Track every URI the client has expressed interest in. The MCP SDK
-    // automatically responds to resources/subscribe; we cooperate by emitting
-    // notifications/resources/updated on each bus event for that URI.
-    // We instrument by wrapping the SDK's transport sender — but the cleanest
-    // path is to subscribe to the bus eagerly for every catalog topic.
+  private wireStdioSubscriptions(server: McpServer): void {
     for (const entry of this.catalog.listCatalog()) {
       const { uri } = entry;
-      const off = this.bus.subscribe(uri, async (msg: BusMessage) => {
-        // Only emit a notification when the URI is currently subscribed.
-        if (!this.subscribedUris.has(uri)) return;
+      this.bus.subscribe(uri, async () => {
         try {
-          await underlying.notification({
+          await server.server.notification({
             method: 'notifications/resources/updated',
             params: { uri },
           });
-        } catch (err) {
-          this.logger.warn({ err, uri, kind: msg.kind }, 'failed to emit resource update notification');
+        } catch {
+          // transport gone or not connected; the next reconnect will resume
         }
       });
-      this.busSubs.set(uri, off);
-    }
-  }
-
-  /** Public API to mark a URI as subscribed (called by transport-level wiring). */
-  markSubscribed(uri: ResourceURI): void {
-    try {
-      parseResourceUri(uri);
-    } catch {
-      return;
-    }
-    this.subscribedUris.add(uri);
-    activeConsumerConnections.inc({ surface: 'mcp' });
-  }
-
-  markUnsubscribed(uri: ResourceURI): void {
-    if (this.subscribedUris.delete(uri)) {
-      activeConsumerConnections.dec({ surface: 'mcp' });
     }
   }
 
