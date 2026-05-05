@@ -1,0 +1,66 @@
+# Continuous integration for the silver8 market data hub.
+#
+# Runs on every pull request and push to `main`:
+#   1. install dependencies (pnpm, with workspace cache)
+#   2. build (turbo across all workspaces)
+#   3. typecheck
+#   4. unit tests (integration suite skips with no bringup mode set)
+#   5. ci-e2e — process bringup integration tests (DEC-034)
+#
+# Process bringup spawns apps/coinbase-mock/dist/main.js and
+# apps/hub/dist/main.js as Node child processes — no Docker needed,
+# ~5s vs ~60s+ for the docker-compose path. The docker path
+# (DEC-029) remains canonical for local dev and production
+# deployment shape; CI uses the fast process path.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# PRs cancel any in-flight run on the same branch when a new push lands.
+# Pushes to main do NOT cancel — every commit that lands on main produces
+# a full status check.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Least-privilege: only read access to the repo.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: build + test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        # Reads the pnpm version from `packageManager` in root package.json.
+        uses: pnpm/action-setup@v3
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm -r build
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Unit tests
+        run: pnpm -r test
+
+      - name: Integration tests (process bringup)
+        run: pnpm --filter @silver8/integration-tests run test:ci-e2e
